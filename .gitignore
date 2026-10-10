@@ -1,0 +1,74 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+Thumbs.db
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+*.lcov
+
+# Falhas de golden tests (imagens geradas ao comparar)
+**/failures/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related (build de release com --obfuscate --split-debug-info)
+app.*.map.json
+/debug-info/
+/symbols/
+
+# Segredos e configuração local: nunca versionar.
+# Lembrete: o que vai em --dart-define acaba no binário; segredos de verdade ficam fora do app.
+.env
+.env.*
+!.env.example
+dart_defines*.json
+!dart_defines.example.json
+
+# Artefatos gerados fora de /build
+*.apk
+*.aab
+
+# Backups exportados pelo app (mesmo criptografados, são dados pessoais)
+cofre-backup*.json
+
+# Claude Code: configurações pessoais (as skills do projeto continuam versionadas)
+.claude/settings.local.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Widget Preview related
+.widget_preview/
