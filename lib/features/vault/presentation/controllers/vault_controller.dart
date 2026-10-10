@@ -1,12 +1,14 @@
 import 'package:flutter/foundation.dart';
 
+import '../../../../core/security/vault_key.dart';
 import '../../domain/entities/entry.dart';
 import '../../domain/entities/entry_input.dart';
 import '../../domain/repositories/backup_codec.dart';
 import '../../domain/repositories/entry_repository.dart';
 import '../../domain/services/password_strength.dart';
 
-enum VaultStatus { loading, ready, loadFailed }
+/// [locked]: sem chave do cofre, nada em memória. [loadFailed]: o arquivo não pôde ser lido com a chave.
+enum VaultStatus { locked, loading, ready, loadFailed }
 
 enum EntryListLayout { wallet, grouped }
 
@@ -31,7 +33,8 @@ class VaultController extends ChangeNotifier {
   final BackupCodec _backupCodec;
   final DateTime Function() _clock;
 
-  VaultStatus _status = VaultStatus.loading;
+  VaultStatus _status = VaultStatus.locked;
+  VaultKey? _key;
   List<Entry> _entries = const [];
   String _query = '';
   EntryListLayout _layout = EntryListLayout.wallet;
@@ -53,15 +56,28 @@ class VaultController extends ChangeNotifier {
   /// [visibleEntries] agrupadas por inicial e em ordem alfabética. Calculado sob demanda e memorizado.
   List<EntryGroup> get groupedEntries => _groupedEntries ??= _group(_visibleEntries);
 
-  Future<void> load() async {
+  /// Decifra as senhas com a chave liberada no desbloqueio. A chave pertence à sessão; aqui só é usada.
+  Future<void> open(VaultKey key) async {
+    _key = key;
+    _status = VaultStatus.loading;
+    notifyListeners();
     try {
-      _entries = await _repository.loadAll();
+      _entries = await _repository.loadAll(key);
       _status = VaultStatus.ready;
     } on EntryStorageFailure {
       // Não sobrescreve os dados ilegíveis: o cofre fica somente leitura até ser apagado.
       _entries = const [];
       _status = VaultStatus.loadFailed;
     }
+    _refreshDerived();
+  }
+
+  /// Ao bloquear, tira as senhas e a referência à chave da memória.
+  void close() {
+    _key = null;
+    _entries = const [];
+    _query = '';
+    _status = VaultStatus.locked;
     _refreshDerived();
   }
 
@@ -101,9 +117,9 @@ class VaultController extends ChangeNotifier {
 
   /// Apaga tudo. Funciona mesmo se o cofre não pôde ser lido, como forma de recuperação.
   Future<void> deleteAll() async {
-    await _repository.saveAll(const []);
+    await _repository.deleteAll();
     _entries = const [];
-    _status = VaultStatus.ready;
+    _status = _key == null ? VaultStatus.locked : VaultStatus.ready;
     _refreshDerived();
   }
 
@@ -135,9 +151,10 @@ class VaultController extends ChangeNotifier {
   );
 
   Future<void> _commit(List<Entry> next) async {
-    if (!isWritable) throw StateError('O cofre não está pronto para escrita ($_status).');
+    final key = _key;
+    if (!isWritable || key == null) throw StateError('O cofre não está pronto para escrita ($_status).');
     // Salva antes de atualizar a tela: se a escrita falhar, o estado continua igual ao que está no aparelho.
-    await _repository.saveAll(next);
+    await _repository.saveAll(next, key);
     _entries = next;
     _refreshDerived();
   }

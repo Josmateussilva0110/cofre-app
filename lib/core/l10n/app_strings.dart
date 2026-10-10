@@ -5,6 +5,7 @@ abstract final class AppStrings {
   // Geral
   static const appName = AppConfig.appName;
   static const cancel = 'Cancelar';
+  static const notNow = 'Agora não';
   static const save = 'Salvar';
   static const edit = 'Editar';
   static const delete = 'Excluir';
@@ -43,9 +44,25 @@ abstract final class AppStrings {
   static const creatingKey = 'Protegendo…';
   static const forgotKey = 'Esqueci a chave mestre';
   static const forgotKeyDialogTitle = 'Esqueceu a chave mestre?';
-  static String forgotKeyDialogMessage(int count) =>
-      'Sem a chave não é possível abrir o cofre. Para continuar, as $count senhas deste aparelho serão apagadas '
+  static const forgotKeyDialogMessage =
+      'Sem a chave não é possível abrir o cofre. Para continuar, todas as senhas deste aparelho serão apagadas '
       'e você criará uma chave nova. Digite $wipeConfirmationWord para confirmar.';
+
+  // Digital protegendo a chave do cofre
+  static const biometricUnlockTitle = 'Desbloquear o Cofre';
+  static const biometricUnlockSubtitle = 'Use sua digital';
+  static const biometricUseMasterKey = 'Usar chave mestre';
+  static const biometricEnableTitle = 'Ativar digital';
+  static const biometricEnableSubtitle = 'Toque no sensor para poder desbloquear com a digital';
+  static const biometricEnabled = 'Digital ativada';
+  static const biometricDeclined = 'Digital desativada. Ative em Ajustes quando quiser.';
+  static const biometricOfferTitle = 'Desbloquear com a digital?';
+  static const biometricOfferMessage =
+      'Assim você abre o cofre sem digitar a chave mestre. Ela continua valendo e será pedida '
+      'se a digital do aparelho mudar.';
+  static const biometricOfferAccept = 'Ativar';
+  static const biometricNeedsMasterKey = 'Use a chave mestre uma vez para ativar a digital.';
+  static const biometricInvalidated = 'Digital alterada no aparelho. Use a chave mestre para reativar.';
   static const masterKeyCreated = 'Chave mestre criada';
   static const biometricPrompt = 'Use sua digital para abrir o Cofre';
   static const biometricDisabled = 'Biometria desativada';
@@ -158,6 +175,11 @@ abstract final class AppStrings {
   static const importDescription = 'Adiciona senhas de um backup';
   static String importDone(int count) => '$count senhas importadas';
   static const importInvalid = 'Arquivo inválido';
+  static const backupReminderFirstTitle = 'Você ainda não fez backup';
+  static const backupReminderStaleTitle = 'Seu backup está desatualizado';
+  static const backupReminderMessage = 'Se esquecer a chave mestre, o backup é a única forma de recuperar suas senhas.';
+  static const backupReminderAction = 'Exportar';
+  static const backupReminderLater = 'Depois';
 
   // Senha do backup
   static const exportPasswordTitle = 'Proteger backup';

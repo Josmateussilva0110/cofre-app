@@ -49,7 +49,7 @@ List<Entry> sampleEntries(DateTime now) {
   ];
 }
 
-/// Conteúdo salvo no armazenamento com as senhas de exemplo.
-Map<String, String> storedSampleEntries(DateTime now) => {
-  AppConfig.entriesStorageKey: jsonEncode(sampleEntries(now).map(EntryDto.toJson).toList()),
+/// Senhas de exemplo no formato da versão anterior (armazenamento seguro, sem a chave mestre).
+Map<String, String> legacyStoredEntries(DateTime now) => {
+  AppConfig.legacyEntriesStorageKey: jsonEncode(sampleEntries(now).map(EntryDto.toJson).toList()),
 };

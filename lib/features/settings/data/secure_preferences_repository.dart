@@ -14,6 +14,8 @@ class SecurePreferencesRepository implements PreferencesRepository {
   static const _themeMode = 'themeMode';
   static const _autoLockMinutes = 'lockMin';
   static const _biometricsEnabled = 'bio';
+  static const _lastBackupAt = 'lastBackup';
+  static const _backupReminderSnoozedUntil = 'backupSnooze';
 
   // Nomes usados pela versão anterior do app.
   static const _legacyThemeNames = {
@@ -42,6 +44,9 @@ class SecurePreferencesRepository implements PreferencesRepository {
     _themeMode: preferences.themeMode.name,
     _autoLockMinutes: preferences.autoLockMinutes,
     _biometricsEnabled: preferences.biometricsEnabled,
+    if (preferences.lastBackupAt case final at?) _lastBackupAt: at.millisecondsSinceEpoch,
+    if (preferences.backupReminderSnoozedUntil case final until?)
+      _backupReminderSnoozedUntil: until.millisecondsSinceEpoch,
   };
 
   static AppPreferences fromJson(Map<dynamic, dynamic> json) {
@@ -55,6 +60,10 @@ class SecurePreferencesRepository implements PreferencesRepository {
           ? minutes.toInt()
           : defaults.autoLockMinutes,
       biometricsEnabled: biometrics is bool ? biometrics : defaults.biometricsEnabled,
+      lastBackupAt: _dateFrom(json[_lastBackupAt]),
+      backupReminderSnoozedUntil: _dateFrom(json[_backupReminderSnoozedUntil]),
     );
   }
+
+  static DateTime? _dateFrom(Object? millis) => millis is int ? DateTime.fromMillisecondsSinceEpoch(millis) : null;
 }

@@ -16,11 +16,14 @@ import 'entry_actions.dart';
 
 /// Tela principal: lista de senhas com busca e escolha de layout.
 class VaultPage extends StatefulWidget {
-  const VaultPage({super.key, required this.vault, required this.actions, required this.onLock});
+  const VaultPage({super.key, required this.vault, required this.actions, required this.onLock, this.notice});
 
   final VaultController vault;
   final EntryActions actions;
   final VoidCallback onLock;
+
+  /// Aviso opcional acima da busca (ex.: lembrete de backup).
+  final Widget? notice;
 
   @override
   State<VaultPage> createState() => _VaultPageState();
@@ -54,6 +57,11 @@ class _VaultPageState extends State<VaultPage> {
               padding: EdgeInsets.fromLTRB(AppSpacing.s20, AppSpacing.s22, AppSpacing.s20, AppSpacing.s14),
               child: _PageTitle(),
             ),
+            if (widget.notice case final notice?)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(AppSpacing.s16, 0, AppSpacing.s16, AppSpacing.s12),
+                child: notice,
+              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(AppSpacing.s16, 0, AppSpacing.s16, AppSpacing.s12),
               child: Row(

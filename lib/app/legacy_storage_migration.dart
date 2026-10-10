@@ -28,8 +28,8 @@ class LegacyStorageMigration {
     if (legacy is! Map) return;
 
     final entries = legacy['entries'];
-    if (entries is List && await _store.read(AppConfig.entriesStorageKey) == null) {
-      await _store.write(AppConfig.entriesStorageKey, jsonEncode(entries));
+    if (entries is List && await _store.read(AppConfig.legacyEntriesStorageKey) == null) {
+      await _store.write(AppConfig.legacyEntriesStorageKey, jsonEncode(entries));
     }
     if (await _store.read(AppConfig.preferencesStorageKey) == null) {
       final preferences = {

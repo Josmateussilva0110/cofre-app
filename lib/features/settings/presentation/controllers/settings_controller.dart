@@ -22,7 +22,12 @@ class SettingsController extends ChangeNotifier {
 
   void setAutoLockMinutes(int minutes) => _update(_preferences.copyWith(autoLockMinutes: minutes));
 
-  void toggleBiometrics() => _update(_preferences.copyWith(biometricsEnabled: !_preferences.biometricsEnabled));
+  /// Só a preferência. Ativar de fato (proteger a chave do cofre pela digital) é feito pela sessão.
+  void setBiometricsEnabled(bool enabled) => _update(_preferences.copyWith(biometricsEnabled: enabled));
+
+  void recordBackup(DateTime at) => _update(_preferences.copyWith(lastBackupAt: at));
+
+  void snoozeBackupReminder(DateTime until) => _update(_preferences.copyWith(backupReminderSnoozedUntil: until));
 
   // A tela muda na hora; se a escrita falhar, a preferência vale só até fechar o app.
   void _update(AppPreferences next) {

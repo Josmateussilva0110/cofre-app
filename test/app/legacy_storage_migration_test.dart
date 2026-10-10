@@ -4,7 +4,7 @@ import 'package:cofre/app/legacy_storage_migration.dart';
 import 'package:cofre/core/config/app_config.dart';
 import 'package:cofre/features/settings/data/secure_preferences_repository.dart';
 import 'package:cofre/features/settings/domain/app_preferences.dart';
-import 'package:cofre/features/vault/data/repositories/secure_entry_repository.dart';
+import 'package:cofre/features/vault/data/repositories/legacy_entry_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../helpers/fakes.dart';
@@ -25,7 +25,7 @@ void main() {
     await LegacyStorageMigration(store).run();
 
     expect(store.values.containsKey(AppConfig.legacyStorageKey), isFalse);
-    final entries = await SecureEntryRepository(store).loadAll();
+    final entries = (await LegacyEntryStore(store).read())!;
     expect(entries.single.title, 'Gmail');
     final preferences = await SecurePreferencesRepository(store).load();
     expect(preferences.themeMode, AppThemeMode.system);
@@ -37,6 +37,6 @@ void main() {
     final store = InMemoryKeyValueStore({AppConfig.legacyStorageKey: '{quebrado'});
     await LegacyStorageMigration(store).run();
     expect(store.values[AppConfig.legacyStorageKey], '{quebrado');
-    expect(store.values.containsKey(AppConfig.entriesStorageKey), isFalse);
+    expect(store.values.containsKey(AppConfig.legacyEntriesStorageKey), isFalse);
   });
 }

@@ -1,6 +1,7 @@
 import 'package:cofre/core/config/app_config.dart';
 import 'package:cofre/core/feedback/toast_controller.dart';
-import 'package:cofre/features/lock/domain/biometric_authenticator.dart';
+import 'package:cofre/core/security/vault_key.dart';
+import 'package:cofre/features/lock/domain/biometric_key_store.dart';
 import 'package:cofre/features/lock/presentation/controllers/session_controller.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,22 +10,27 @@ import '../../helpers/fakes.dart';
 
 void main() {
   late ToastController toast;
-  late FakeBiometricAuthenticator authenticator;
+  late FakeBiometricKeyStore biometrics;
   late InMemoryKeyValueStore store;
+  late bool biometricsEnabled;
   var autoLockMinutes = 5;
-  var biometricsEnabled = true;
+  VaultKey? openedWith;
+  var closeCalls = 0;
 
   SessionController create({DateTime Function()? clock}) => SessionController(
-    authenticator: authenticator,
-    masterKeys: masterKeyRepository(store),
+    keys: vaultKeyRepository(store, biometrics),
     toast: toast,
     autoLockMinutes: () => autoLockMinutes,
     biometricsEnabled: () => biometricsEnabled,
+    setBiometricsEnabled: (enabled) => biometricsEnabled = enabled,
+    onUnlocked: (key) async => openedWith = key,
+    onLocked: () => closeCalls++,
     clock: clock ?? DateTime.now,
   );
 
-  Future<SessionController> createWithKey() async {
-    await masterKeyRepository(store).setKey(testMasterKey);
+  Future<SessionController> createWithKey({bool withBiometrics = true}) async {
+    final key = await vaultKeyRepository(store, biometrics).create(testMasterKey);
+    if (withBiometrics) await vaultKeyRepository(store, biometrics).enableBiometrics(key, testPrompt);
     final session = create();
     await session.load();
     return session;
@@ -32,10 +38,12 @@ void main() {
 
   setUp(() {
     toast = ToastController();
-    authenticator = FakeBiometricAuthenticator();
+    biometrics = FakeBiometricKeyStore();
     store = InMemoryKeyValueStore();
-    autoLockMinutes = 5;
     biometricsEnabled = true;
+    autoLockMinutes = 5;
+    openedWith = null;
+    closeCalls = 0;
   });
 
   group('primeiro uso', () {
@@ -54,20 +62,81 @@ void main() {
       expect(session.keyError, MasterKeyError.mismatch);
     });
 
-    test('cria a chave, desbloqueia e guarda só o hash', () async {
+    test('cria a chave, entrega a chave do cofre e oferece a digital sem acionar o sensor', () async {
       final session = create();
       await session.load();
       expect(await session.createMasterKey(testMasterKey, testMasterKey), isTrue);
       expect(session.isLocked, isFalse);
+      expect(openedWith, isNotNull);
       expect(session.mode, LockMode.enterKey);
-      expect(store.values[AppConfig.masterKeyStorageKey], isNot(contains(testMasterKey)));
+      await pumpEventQueue();
+      expect(session.hasBiometricOffer, isTrue);
+      expect(biometrics.prompts, 0);
+      expect(store.values.containsKey(AppConfig.biometricVaultKeyStorageKey), isFalse);
+
+      await session.acceptBiometricOffer();
+      expect(session.hasBiometricOffer, isFalse);
+      expect(biometrics.prompts, 1);
+      expect(store.values.containsKey(AppConfig.biometricVaultKeyStorageKey), isTrue);
+      expect(toast.message, 'Digital ativada');
+    });
+
+    test('recusar a oferta desliga a digital sem acionar o sensor', () async {
+      final session = create();
+      await session.load();
+      await session.createMasterKey(testMasterKey, testMasterKey);
+      await pumpEventQueue();
+
+      session.declineBiometricOffer();
+      expect(session.hasBiometricOffer, isFalse);
+      expect(biometricsEnabled, isFalse);
+      expect(biometrics.prompts, 0);
+      expect(toast.message, 'Digital desativada. Ative em Ajustes quando quiser.');
+    });
+
+    test('cancelar o sensor depois de aceitar também desliga a digital', () async {
+      final session = create();
+      await session.load();
+      await session.createMasterKey(testMasterKey, testMasterKey);
+      await pumpEventQueue();
+
+      biometrics.nextFailure = BiometricKeyFailureReason.canceled;
+      await session.acceptBiometricOffer();
+      expect(biometricsEnabled, isFalse);
+      expect(store.values.containsKey(AppConfig.biometricVaultKeyStorageKey), isFalse);
+      expect(toast.message, 'Digital desativada. Ative em Ajustes quando quiser.');
+    });
+
+    test('aparelho sem digital disponível não recebe a oferta', () async {
+      biometrics.availabilityResult = BiometricAvailability.notEnrolled;
+      final session = create();
+      await session.load();
+      await session.createMasterKey(testMasterKey, testMasterKey);
+      await pumpEventQueue();
+      expect(session.hasBiometricOffer, isFalse);
+      expect(biometricsEnabled, isFalse);
+      expect(biometrics.prompts, 0);
+    });
+
+    test('bloquear descarta a oferta pendente', () async {
+      final session = create();
+      await session.load();
+      await session.createMasterKey(testMasterKey, testMasterKey);
+      await pumpEventQueue();
+
+      session.lock();
+      expect(session.hasBiometricOffer, isFalse);
+      await session.acceptBiometricOffer();
+      session.declineBiometricOffer();
+      expect(biometrics.prompts, 0);
+      expect(biometricsEnabled, isTrue);
     });
 
     test('digital não desbloqueia antes de existir chave', () async {
       final session = create();
       await session.load();
       await session.unlockWithBiometrics();
-      expect(authenticator.calls, 0);
+      expect(biometrics.prompts, 0);
       expect(session.isLocked, isTrue);
     });
   });
@@ -77,16 +146,26 @@ void main() {
       final session = await createWithKey();
       expect(await session.unlockWithKey('chave-errada'), isFalse);
       expect(session.keyError, MasterKeyError.wrongKey);
+      expect(openedWith, isNull);
       expect(await session.unlockWithKey(testMasterKey), isTrue);
       expect(session.isLocked, isFalse);
+      expect(openedWith, isNotNull);
+    });
+
+    test('bloquear fecha o cofre e zera a chave', () async {
+      final session = await createWithKey();
+      await session.unlockWithKey(testMasterKey);
+      final key = openedWith!;
+      session.lock();
+      expect(closeCalls, 1);
+      expect(() => key.bytes, throwsStateError);
     });
 
     test('após 5 erros bloqueia novas tentativas, inclusive com a chave certa', () {
       fakeAsync((async) {
-        late SessionController session;
-        masterKeyRepository(store).setKey(testMasterKey);
+        vaultKeyRepository(store, biometrics).create(testMasterKey);
         async.flushMicrotasks();
-        session = create(clock: () => async.getClock(DateTime(2026)).now())..load();
+        final session = create(clock: () => async.getClock(DateTime(2026)).now())..load();
         async.flushMicrotasks();
 
         for (var i = 0; i < 5; i++) {
@@ -113,7 +192,7 @@ void main() {
     test('o bloqueio sobrevive a reabrir o app', () {
       fakeAsync((async) {
         DateTime now() => async.getClock(DateTime(2026)).now();
-        masterKeyRepository(store).setKey(testMasterKey);
+        vaultKeyRepository(store, biometrics).create(testMasterKey);
         async.flushMicrotasks();
         final first = create(clock: now)..load();
         async.flushMicrotasks();
@@ -137,38 +216,61 @@ void main() {
       await session.resetMasterKey();
       expect(session.isLocked, isTrue);
       expect(session.mode, LockMode.createKey);
-      expect(store.values.containsKey(AppConfig.masterKeyStorageKey), isFalse);
+      expect(store.values, isEmpty);
     });
   });
 
   group('digital', () {
-    test('reconhecida desbloqueia', () async {
+    test('reconhecida desbloqueia com a mesma chave do cofre', () async {
       final session = await createWithKey();
       await session.unlockWithBiometrics();
       expect(session.isLocked, isFalse);
+      expect(openedWith, isNotNull);
       expect(toast.message, 'Digital reconhecida');
     });
 
-    test('falha mostra mensagem e mantém bloqueado', () async {
-      authenticator.failure = const BiometricFailure(BiometricFailureReason.notEnrolled);
+    test('cancelada não mostra aviso e mantém bloqueado', () async {
       final session = await createWithKey();
+      biometrics.nextFailure = BiometricKeyFailureReason.canceled;
       await session.unlockWithBiometrics();
       expect(session.isLocked, isTrue);
       expect(session.isScanning, isFalse);
-      expect(toast.message, 'Nenhuma digital cadastrada no aparelho');
+      expect(toast.message, isNull);
+    });
+
+    test('sem chave protegida pela digital, pede a chave mestre', () async {
+      final session = await createWithKey(withBiometrics: false);
+      await session.unlockWithBiometrics();
+      expect(biometrics.prompts, 0);
+      expect(toast.message, 'Use a chave mestre uma vez para ativar a digital.');
     });
 
     test('desativada em Ajustes não chama o leitor', () async {
       biometricsEnabled = false;
       final session = await createWithKey();
+      final before = biometrics.prompts;
       await session.unlockWithBiometrics();
-      expect(authenticator.calls, 0);
+      expect(biometrics.prompts, before);
+    });
+
+    test('ligar em Ajustes exige cofre aberto e um toque; desligar apaga', () async {
+      final session = await createWithKey(withBiometrics: false);
+      biometricsEnabled = false;
+      expect(await session.setBiometrics(enabled: true), isFalse);
+
+      await session.unlockWithKey(testMasterKey);
+      expect(await session.setBiometrics(enabled: true), isTrue);
+      expect(biometricsEnabled, isTrue);
+
+      expect(await session.setBiometrics(enabled: false), isFalse);
+      expect(biometricsEnabled, isFalse);
+      expect(store.values.containsKey(AppConfig.biometricVaultKeyStorageKey), isFalse);
     });
   });
 
   group('inatividade', () {
     void unlockedSession(FakeAsync async, void Function(SessionController session) body) {
-      masterKeyRepository(store).setKey(testMasterKey);
+      vaultKeyRepository(store, biometrics).create(testMasterKey);
       async.flushMicrotasks();
       final session = create(clock: () => async.getClock(DateTime(2026)).now())
         ..load()

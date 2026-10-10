@@ -10,7 +10,8 @@ import 'plain_backup_format.dart';
 /// Backup criptografado com a senha escolhida pelo usuário na exportação.
 ///
 /// O arquivo é um JSON com os parâmetros da cifra (salt, nonce, iterações) e o conteúdo cifrado em base64.
-/// Na importação, backups antigos sem criptografia também são aceitos.
+/// Na importação, só esse formato é aceito: um arquivo em texto puro poderia ter sido montado ou alterado por
+/// qualquer um, sem a autenticação do AES-GCM.
 class EncryptedBackupCodec implements BackupCodec {
   EncryptedBackupCodec({PasswordCipher? cipher}) : _cipher = cipher ?? PasswordCipher();
 
@@ -56,9 +57,7 @@ class EncryptedBackupCodec implements BackupCodec {
       throw const BackupFailure(BackupFailureReason.invalidFile);
     }
 
-    if (decoded is! Map || decoded[_format] != format) {
-      return PlainBackupFormat.decodeJson(decoded) ?? (throw const BackupFailure(BackupFailureReason.invalidFile));
-    }
+    if (decoded is! Map || decoded[_format] != format) throw const BackupFailure(BackupFailureReason.invalidFile);
 
     final payload = _payloadFrom(decoded);
     if (password == null || password.isEmpty) throw const BackupFailure(BackupFailureReason.passwordRequired);

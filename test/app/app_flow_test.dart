@@ -1,5 +1,10 @@
+import 'dart:convert';
+
 import 'package:cofre/core/config/app_config.dart';
+import 'package:cofre/features/lock/domain/biometric_key_store.dart';
 import 'package:cofre/features/settings/domain/app_preferences.dart';
+import 'package:cofre/features/vault/data/backup/encrypted_backup_codec.dart';
+import 'package:cofre/features/vault/domain/entities/entry_input.dart';
 import 'package:cofre/features/vault/domain/services/password_strength.dart';
 import 'package:cofre/features/vault/presentation/controllers/vault_controller.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../helpers/fakes.dart';
+import '../helpers/fixtures.dart';
 import '../helpers/pump_app.dart';
 
 void main() {
@@ -38,13 +44,15 @@ void main() {
     await tester.tap(find.text('Criar chave mestre'));
     await tester.pumpAndSettle();
     expect(find.text('Senhas'), findsOneWidget);
+    await tester.tap(find.text('Agora não'));
+    await tester.pumpAndSettle();
 
     app.dependencies.session.lock();
     await tester.pumpAndSettle();
     expect(find.text('Digite sua chave mestre para abrir'), findsOneWidget);
     await unlockWithKey(tester, 'minha-chave');
     expect(find.text('Senhas'), findsOneWidget);
-  }, withMasterKey: false);
+  }, setup: TestSetup.legacyWithoutKey);
 
   appTest('muitas tentativas erradas bloqueiam temporariamente', (tester, app) async {
     for (var i = 0; i < 5; i++) {
@@ -146,14 +154,15 @@ void main() {
     await tester.enterText(fields.at(1), 'senha-do-backup');
     await tester.tap(find.text('Exportar'));
     await tester.pumpAndSettle();
-    final saved = app.files.savedContent!;
+    final saved = app.fileTransfer.savedContent!;
     expect(saved, isNot(contains('Ve!ra#2024-mar')));
     expect(find.text('Cofre exportado · 4 senhas'), findsOneWidget);
     expect(find.text('Proteger backup'), findsNothing);
   });
 
   appTest('importar backup criptografado pede a senha e repete se estiver errada', (tester, app) async {
-    app.files.fileToPick = await app.dependencies.vault.exportBackup(password: 'senha-do-backup');
+    app.fileTransfer.fileToPick = await EncryptedBackupCodec(cipher: fastCipher())
+        .encode(sampleEntries(DateTime.now()), exportedAt: DateTime.now(), password: 'senha-do-backup');
     await openSettings(tester);
 
     await tester.tap(find.text('Importar cofre'));
@@ -172,13 +181,14 @@ void main() {
     expect(find.text('4 senhas importadas'), findsOneWidget);
   });
 
-  appTest('importar backup antigo sem criptografia não pede senha', (tester, app) async {
-    app.files.fileToPick = '[{"title":"Antigo","pw":"x"}]';
+  appTest('importar backup sem criptografia é recusado', (tester, app) async {
+    app.fileTransfer.fileToPick = '[{"title":"Antigo","pw":"x"}]';
     await openSettings(tester);
     await tester.tap(find.text('Importar cofre'));
     await tester.pumpAndSettle();
     expect(find.text('Backup protegido'), findsNothing);
-    expect(app.dependencies.vault.entries.first.title, 'Antigo');
+    expect(find.text('Arquivo inválido'), findsOneWidget);
+    expect(app.dependencies.vault.entries.map((entry) => entry.title), isNot(contains('Antigo')));
   });
 
   appTest('formulário valida e salva nova senha', (tester, app) async {
@@ -271,5 +281,137 @@ void main() {
     await tester.tap(find.bySemanticsLabel('Nova senha'));
     await tester.pumpAndSettle();
     expect(find.text('Salvar no cofre'), findsNothing);
-  }, store: () => InMemoryKeyValueStore({AppConfig.entriesStorageKey: '{corrompido'}));
+  }, prepare: _corruptVaultFiles);
+
+  appTest('primeiro uso: explica a digital antes de acionar o sensor', (tester, app) async {
+    final fields = find.byType(TextField);
+    await tester.enterText(fields.at(0), 'minha-chave');
+    await tester.enterText(fields.at(1), 'minha-chave');
+    await tester.tap(find.text('Criar chave mestre'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Desbloquear com a digital?'), findsOneWidget);
+    expect(app.biometrics.prompts, 0);
+
+    await tester.tap(find.text('Ativar'));
+    await tester.pumpAndSettle();
+    expect(app.biometrics.prompts, 1);
+    expect(find.text('Desbloquear com a digital?'), findsNothing);
+    expect(find.text('Digital ativada'), findsOneWidget);
+    expect(app.store.values.containsKey(AppConfig.biometricVaultKeyStorageKey), isTrue);
+  }, setup: TestSetup.legacyWithoutKey);
+
+  appTest('migra senhas da versão anterior para o arquivo cifrado ao criar a chave', (tester, app) async {
+    final fields = find.byType(TextField);
+    await tester.enterText(fields.at(0), 'minha-chave');
+    await tester.enterText(fields.at(1), 'minha-chave');
+    await tester.tap(find.text('Criar chave mestre'));
+    await tester.pumpAndSettle();
+
+    expect(app.dependencies.vault.entries, hasLength(4));
+    expect(app.store.values.containsKey(AppConfig.legacyEntriesStorageKey), isFalse);
+    expect(utf8.decode(app.files.files[AppConfig.vaultFileName]!), isNot(contains('Ve!ra#2024-mar')));
+  }, setup: TestSetup.legacyWithoutKey);
+
+  appTest('nada fica em texto no aparelho e bloquear tira as senhas da memória', (tester, app) async {
+    await unlockWithKey(tester);
+    expect(app.dependencies.vault.entries, hasLength(4));
+
+    final everythingStored = [
+      ...app.store.values.values,
+      for (final bytes in app.files.files.values) utf8.decode(bytes),
+    ].join();
+    for (final secret in ['Ve!ra#2024-mar', 'gH_7tq!Lm9#xP2wz', testMasterKey, 'ana.souza@gmail.com']) {
+      expect(everythingStored, isNot(contains(secret)));
+    }
+
+    app.dependencies.session.lock();
+    await tester.pumpAndSettle();
+    expect(app.dependencies.vault.entries, isEmpty);
+    expect(app.dependencies.vault.status, VaultStatus.locked);
+  });
+
+  appTest('digital alterada no aparelho: pede a chave mestre e reativa', (tester, app) async {
+    app.biometrics.nextFailure = BiometricKeyFailureReason.invalidated;
+    await tester.tap(find.byIcon(Symbols.fingerprint_rounded));
+    await tester.pumpAndSettle();
+    expect(find.text('Digital alterada no aparelho. Use a chave mestre para reativar.'), findsOneWidget);
+    expect(app.dependencies.session.isLocked, isTrue);
+
+    await unlockWithKey(tester);
+    expect(find.text('Desbloquear com a digital?'), findsOneWidget);
+    await tester.tap(find.text('Ativar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Digital ativada'), findsOneWidget);
+
+    app.dependencies.session.lock();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Symbols.fingerprint_rounded));
+    await tester.pumpAndSettle();
+    expect(app.dependencies.session.isLocked, isFalse);
+  });
+
+  appTest('"Agora não" na reativação da digital desliga a preferência', (tester, app) async {
+    await app.dependencies.session.setBiometrics(enabled: false);
+    app.dependencies.settings.setBiometricsEnabled(true);
+
+    await unlockWithKey(tester);
+    final promptsBefore = app.biometrics.prompts;
+    await tester.tap(find.text('Agora não'));
+    await tester.pumpAndSettle();
+    expect(find.text('Digital desativada. Ative em Ajustes quando quiser.'), findsOneWidget);
+    expect(app.dependencies.settings.preferences.biometricsEnabled, isFalse);
+    expect(app.biometrics.prompts, promptsBefore);
+  });
+
+  appTest('lembrete de backup aparece com 5 senhas e "Depois" esconde', (tester, app) async {
+    await unlockWithKey(tester);
+    expect(find.text('Você ainda não fez backup'), findsNothing);
+
+    await app.dependencies.vault.create(const EntryInput(title: 'Quinta', username: '', password: 'x'));
+    await tester.pumpAndSettle();
+    expect(find.text('Você ainda não fez backup'), findsOneWidget);
+
+    await tester.tap(find.text('Depois'));
+    await tester.pumpAndSettle();
+    expect(find.text('Você ainda não fez backup'), findsNothing);
+    expect(app.dependencies.settings.preferences.backupReminderSnoozedUntil, isNotNull);
+  });
+
+  appTest('exportar pelo lembrete registra o backup e esconde a faixa', (tester, app) async {
+    await unlockWithKey(tester);
+    await app.dependencies.vault.create(const EntryInput(title: 'Quinta', username: '', password: 'x'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Exportar'));
+    await tester.pumpAndSettle();
+    final fields = find.byType(TextField);
+    await tester.enterText(fields.at(fields.evaluate().length - 2), 'senha-do-backup');
+    await tester.enterText(fields.last, 'senha-do-backup');
+    await tester.tap(find.text('Exportar').last);
+    await tester.pumpAndSettle();
+
+    expect(app.fileTransfer.savedContent, isNotNull);
+    expect(app.dependencies.settings.preferences.lastBackupAt, isNotNull);
+    expect(find.text('Você ainda não fez backup'), findsNothing);
+  });
+
+  appTest('ligar e desligar a digital em Ajustes', (tester, app) async {
+    await openSettings(tester);
+    await tester.tap(find.text('Desbloquear com digital'));
+    await tester.pumpAndSettle();
+    expect(app.dependencies.settings.preferences.biometricsEnabled, isFalse);
+    expect(app.store.values.containsKey(AppConfig.biometricVaultKeyStorageKey), isFalse);
+
+    final promptsBefore = app.biometrics.prompts;
+    await tester.tap(find.text('Desbloquear com digital'));
+    await tester.pumpAndSettle();
+    expect(app.biometrics.prompts, promptsBefore + 1);
+    expect(app.dependencies.settings.preferences.biometricsEnabled, isTrue);
+    expect(find.text('Digital ativada'), findsOneWidget);
+  });
+}
+
+Future<void> _corruptVaultFiles(InMemoryKeyValueStore store, InMemoryBlobStore files) async {
+  files.files[AppConfig.vaultFileName] = utf8.encode('{corrompido');
 }

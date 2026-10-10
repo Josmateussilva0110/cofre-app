@@ -6,11 +6,23 @@ abstract final class AppConfig {
   static const appVersion = String.fromEnvironment('APP_VERSION', defaultValue: '1.0');
 
   // Chaves no armazenamento seguro (Keystore/Keychain).
-  static const entriesStorageKey = 'cofre-entries-v2';
   static const preferencesStorageKey = 'cofre-preferences-v2';
   static const legacyStorageKey = 'cofre-v1';
-  static const masterKeyStorageKey = 'cofre-master-key-v1';
   static const unlockAttemptsStorageKey = 'cofre-unlock-attempts-v1';
+
+  /// Chave do cofre embrulhada pela chave mestre (e, opcionalmente, pela digital).
+  static const vaultKeyStorageKey = 'cofre-vault-key-v1';
+  static const biometricVaultKeyStorageKey = 'cofre-vault-key-biometric-v1';
+
+  /// Versão anterior: só o hash da chave mestre. Removido na migração.
+  static const legacyMasterKeyHashStorageKey = 'cofre-master-key-v1';
+
+  /// Versão anterior: senhas no armazenamento seguro, sem a chave mestre. Removido na migração.
+  static const legacyEntriesStorageKey = 'cofre-entries-v2';
+
+  // Arquivos na pasta privada do app.
+  static const vaultFileName = 'vault.enc';
+  static const vaultBackupFileName = 'vault.enc.bak';
 
   // Sessão.
   static const idleCheckInterval = Duration(seconds: 2);
@@ -34,4 +46,11 @@ abstract final class AppConfig {
   static const backupFileName = 'cofre-backup.json';
   static const backupMimeType = 'application/json';
   static const minBackupPasswordLength = 8;
+
+  /// Lembrete de backup: aparece a partir desta quantidade de senhas, se nunca houve backup ou o último é antigo.
+  static const backupReminderMinEntries = 5;
+  static const backupReminderMaxAge = Duration(days: 30);
+
+  /// Tempo que o lembrete fica escondido ao tocar em "Depois".
+  static const backupReminderSnooze = Duration(days: 7);
 }

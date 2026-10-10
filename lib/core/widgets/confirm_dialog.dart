@@ -10,19 +10,25 @@ import 'bare_field.dart';
 import 'dialog_frame.dart';
 import 'overlay_route.dart';
 
-/// Conteúdo de um diálogo de confirmação de ação destrutiva.
+/// [danger] para ações destrutivas; [accent] para convites (ex.: ativar um recurso).
+enum ConfirmDialogTone { danger, accent }
+
+/// Conteúdo de um diálogo de confirmação.
 class ConfirmDialogData {
   const ConfirmDialogData({
     required this.icon,
     required this.title,
     required this.message,
     required this.confirmLabel,
+    this.cancelLabel = AppStrings.cancel,
+    this.tone = ConfirmDialogTone.danger,
     this.confirmationWord,
     this.confirmationHint = '',
   });
 
   final IconData icon;
-  final String title, message, confirmLabel;
+  final String title, message, confirmLabel, cancelLabel;
+  final ConfirmDialogTone tone;
 
   /// Quando definido, o usuário precisa digitar esta palavra para liberar a confirmação.
   final String? confirmationWord;
@@ -65,13 +71,17 @@ class _ConfirmDialogState extends State<ConfirmDialog> {
     final colors = context.appColors;
     final styles = context.textStyles;
     final data = widget.data;
+    final (strong, onStrong, soft) = switch (data.tone) {
+      ConfirmDialogTone.danger => (colors.danger, colors.onDanger, colors.dangerSoft),
+      ConfirmDialogTone.accent => (colors.accent, colors.onAccent, colors.accentSoft),
+    };
 
     return DialogFrame(
       onDismiss: () => _close(false),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          DialogIcon(icon: data.icon, color: colors.danger, background: colors.dangerSoft),
+          DialogIcon(icon: data.icon, color: strong, background: soft),
           const SizedBox(height: AppSpacing.s14),
           Text(data.title, textAlign: TextAlign.center, style: styles.titleSmall),
           const SizedBox(height: AppSpacing.s10),
@@ -93,7 +103,7 @@ class _ConfirmDialogState extends State<ConfirmDialog> {
             children: [
               Expanded(
                 child: DialogButton(
-                  label: AppStrings.cancel,
+                  label: data.cancelLabel,
                   background: colors.surfaceHigh,
                   onTap: () => _close(false),
                 ),
@@ -102,8 +112,8 @@ class _ConfirmDialogState extends State<ConfirmDialog> {
               Expanded(
                 child: DialogButton(
                   label: data.confirmLabel,
-                  background: colors.danger,
-                  foreground: colors.onDanger,
+                  background: strong,
+                  foreground: onStrong,
                   isEnabled: _isReady,
                   onTap: () {
                     if (_isReady) _close(true);

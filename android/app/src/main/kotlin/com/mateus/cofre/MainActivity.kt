@@ -30,6 +30,7 @@ class MainActivity : FlutterFragmentActivity() {
                 else -> result.notImplemented()
             }
         }
+        BiometricKeyChannel(this, flutterEngine.dartExecutor.binaryMessenger)
     }
 
     // No Android 13+ a marca "sensível" impede que o sistema mostre o texto na prévia de "copiado".

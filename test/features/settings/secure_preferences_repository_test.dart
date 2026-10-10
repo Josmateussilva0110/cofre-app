@@ -15,6 +15,18 @@ void main() {
     expect(loaded.themeMode, AppThemeMode.light);
     expect(loaded.autoLockMinutes, 15);
     expect(loaded.biometricsEnabled, isFalse);
+    expect(loaded.lastBackupAt, isNull);
+    expect(loaded.backupReminderSnoozedUntil, isNull);
+  });
+
+  test('salva e recarrega as datas do lembrete de backup', () async {
+    final repository = SecurePreferencesRepository(InMemoryKeyValueStore());
+    final lastBackupAt = DateTime(2026, 9, 1, 12, 30);
+    final snoozedUntil = DateTime(2026, 10, 17);
+    await repository.save(AppPreferences(lastBackupAt: lastBackupAt, backupReminderSnoozedUntil: snoozedUntil));
+    final loaded = await repository.load();
+    expect(loaded.lastBackupAt, lastBackupAt);
+    expect(loaded.backupReminderSnoozedUntil, snoozedUntil);
   });
 
   test('entende os nomes de tema da versão anterior', () async {

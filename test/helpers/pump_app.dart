@@ -7,40 +7,45 @@ import 'package:flutter_test/flutter_test.dart';
 import 'fakes.dart';
 import 'fixtures.dart';
 
+/// Situação do aparelho antes de abrir o app.
+enum TestSetup {
+  /// App em uso: chave mestre [testMasterKey], senhas de exemplo no arquivo cifrado e digital ativada.
+  existingVault,
+
+  /// Atualização a partir da versão sem chave mestre: senhas de exemplo no formato antigo.
+  legacyWithoutKey,
+}
+
 class TestApp {
   TestApp({
     required this.dependencies,
     required this.store,
-    required this.clipboard,
     required this.files,
-    required this.authenticator,
+    required this.biometrics,
+    required this.clipboard,
+    required this.fileTransfer,
   });
 
   final AppDependencies dependencies;
   final InMemoryKeyValueStore store;
+  final InMemoryBlobStore files;
+  final FakeBiometricKeyStore biometrics;
   final FakeClipboard clipboard;
-  final FakeFileTransferService files;
-  final FakeBiometricAuthenticator authenticator;
+  final FakeFileTransferService fileTransfer;
 }
 
 /// Teste de widget com o app montado. Desmonta e libera os timers no fim (o flutter_test exige que nenhum
 /// timer fique pendente ao terminar o corpo do teste).
 ///
-/// Por padrão o app já tem a chave mestre [testMasterKey]; use [withMasterKey] = false para o primeiro uso.
+/// [prepare] roda depois de montar os dados iniciais e antes de abrir o app (ex.: corromper o arquivo).
 void appTest(
   String description,
   Future<void> Function(WidgetTester tester, TestApp app) body, {
-  InMemoryKeyValueStore Function()? store,
-  bool withMasterKey = true,
-  bool biometricResult = true,
+  TestSetup setup = TestSetup.existingVault,
+  Future<void> Function(InMemoryKeyValueStore store, InMemoryBlobStore files)? prepare,
 }) {
   testWidgets(description, (tester) async {
-    final app = await pumpCofreApp(
-      tester,
-      store: store?.call(),
-      withMasterKey: withMasterKey,
-      biometricResult: biometricResult,
-    );
+    final app = await pumpCofreApp(tester, setup: setup, prepare: prepare);
     await body(tester, app);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 3));
@@ -48,27 +53,36 @@ void appTest(
   });
 }
 
-/// Monta o app com armazenamento em memória e as senhas de exemplo.
 Future<TestApp> pumpCofreApp(
   WidgetTester tester, {
-  InMemoryKeyValueStore? store,
-  bool withMasterKey = true,
-  bool biometricResult = true,
+  TestSetup setup = TestSetup.existingVault,
+  Future<void> Function(InMemoryKeyValueStore store, InMemoryBlobStore files)? prepare,
 }) async {
   tester.view.physicalSize = const Size(390 * 3, 844 * 3);
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.reset);
 
-  final memoryStore = store ?? InMemoryKeyValueStore(storedSampleEntries(DateTime.now()));
-  if (withMasterKey) await masterKeyRepository(memoryStore).setKey(testMasterKey);
+  final now = DateTime.now();
+  final store = InMemoryKeyValueStore();
+  final files = InMemoryBlobStore();
+  final biometrics = FakeBiometricKeyStore();
+  switch (setup) {
+    case TestSetup.existingVault:
+      final key = await seedVault(store, files, sampleEntries(now), biometrics: biometrics, withBiometrics: true);
+      key.destroy();
+    case TestSetup.legacyWithoutKey:
+      store.values.addAll(legacyStoredEntries(now));
+  }
+  await prepare?.call(store, files);
+
   final clipboard = FakeClipboard();
-  final files = FakeFileTransferService();
-  final authenticator = FakeBiometricAuthenticator(result: biometricResult);
+  final fileTransfer = FakeFileTransferService();
   final dependencies = await AppDependencies.create(
-    store: memoryStore,
-    authenticator: authenticator,
-    clipboard: clipboard.service(),
+    store: store,
     files: files,
+    biometricKeys: biometrics,
+    clipboard: clipboard.service(),
+    fileTransfer: fileTransfer,
     keyDerivation: fastKeyDerivation,
     fonts: AppFonts.system(),
   );
@@ -77,10 +91,11 @@ Future<TestApp> pumpCofreApp(
   await tester.pumpAndSettle();
   return TestApp(
     dependencies: dependencies,
-    store: memoryStore,
-    clipboard: clipboard,
+    store: store,
     files: files,
-    authenticator: authenticator,
+    biometrics: biometrics,
+    clipboard: clipboard,
+    fileTransfer: fileTransfer,
   );
 }
 

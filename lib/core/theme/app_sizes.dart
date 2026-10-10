@@ -26,6 +26,9 @@ abstract final class AppSizes {
   static const double iconTile = 38;
   static const double chipHeight = 36;
   static const double menuItemHeight = 42;
+
+  /// Alvo de toque mínimo recomendado para acessibilidade.
+  static const double minTouchTarget = 48;
   static const double switchWidth = 52;
   static const double switchHeight = 32;
   static const double switchThumb = 26;

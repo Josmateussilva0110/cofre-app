@@ -55,30 +55,34 @@ void main() {
     expect(codec.decode(broken, password: 'senha'), _failsWith(BackupFailureReason.invalidFile));
   });
 
-  group('backups antigos sem criptografia', () {
-    test('continuam podendo ser importados', () async {
-      final legacy = PlainBackupFormat.encode(entries, exportedAt: exportedAt);
-      expect(await codec.decode(legacy), hasLength(entries.length));
-    });
-
-    test('ignoram itens inválidos e aceitam lista pura', () async {
-      expect(
-        await codec.decode('{"entries":[{"title":"A","pw":"x"},{"title":"","pw":"y"},{"pw":"z"},"lixo"]}'),
-        hasLength(1),
-      );
-      expect((await codec.decode('[{"title":"B","pw":"q","hue":250}]')).single.hue, 250);
-    });
-
-    test('matiz zero ou ausente vira o padrão; campos longos são cortados', () async {
-      final list = await codec.decode('[{"title":"A","pw":"x","hue":0},{"title":"B","pw":"y"}]');
-      expect(list.map((e) => e.hue), everyElement(defaultEntryHue));
-      final longTitle = 'x' * (EntryInput.maxTitleLength + 50);
-      expect((await codec.decode('[{"title":"$longTitle","pw":"x"}]')).single.title, hasLength(120));
+  group('arquivos sem criptografia', () {
+    test('são recusados mesmo no formato antigo', () {
+      final plain = PlainBackupFormat.encode(entries, exportedAt: exportedAt);
+      expect(codec.decode(plain), _failsWith(BackupFailureReason.invalidFile));
+      expect(codec.decode('[{"title":"B","pw":"q"}]'), _failsWith(BackupFailureReason.invalidFile));
     });
 
     test('formato desconhecido é inválido', () {
       expect(codec.decode('nope'), _failsWith(BackupFailureReason.invalidFile));
       expect(codec.decode('{"outra":"coisa"}'), _failsWith(BackupFailureReason.invalidFile));
+    });
+  });
+
+  group('conteúdo decifrado', () {
+    test('ignora itens inválidos e exige o objeto com entries', () {
+      expect(
+        PlainBackupFormat.decode('{"entries":[{"title":"A","pw":"x"},{"title":"","pw":"y"},{"pw":"z"},"lixo"]}'),
+        hasLength(1),
+      );
+      expect(PlainBackupFormat.decode('{"entries":[{"title":"B","pw":"q","hue":250}]}')!.single.hue, 250);
+      expect(PlainBackupFormat.decode('[{"title":"B","pw":"q"}]'), isNull);
+    });
+
+    test('matiz zero ou ausente vira o padrão; campos longos são cortados', () {
+      final list = PlainBackupFormat.decode('{"entries":[{"title":"A","pw":"x","hue":0},{"title":"B","pw":"y"}]}')!;
+      expect(list.map((e) => e.hue), everyElement(defaultEntryHue));
+      final longTitle = 'x' * (EntryInput.maxTitleLength + 50);
+      expect(PlainBackupFormat.decode('{"entries":[{"title":"$longTitle","pw":"x"}]}')!.single.title, hasLength(120));
     });
   });
 }

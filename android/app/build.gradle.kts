@@ -47,3 +47,8 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // BiometricPrompt com CryptoObject: a digital libera a chave do cofre guardada no Keystore.
+    implementation("androidx.biometric:biometric:1.1.0")
+}

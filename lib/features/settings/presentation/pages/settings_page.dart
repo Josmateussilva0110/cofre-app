@@ -17,13 +17,14 @@ import '../widgets/settings_row.dart';
 import '../widgets/theme_mode_selector.dart';
 import '../widgets/toggle_switch.dart';
 
-/// Tela de ajustes. As ações de backup e de apagar o cofre vêm de fora (pertencem à feature do cofre).
+/// Tela de ajustes. Backup, apagar o cofre e digital vêm de fora (pertencem às features do cofre e da sessão).
 class SettingsPage extends StatelessWidget {
   const SettingsPage({
     super.key,
     required this.settings,
     required this.entryCount,
     required this.onBack,
+    required this.onToggleBiometrics,
     required this.onExport,
     required this.onImport,
     required this.onWipe,
@@ -32,6 +33,9 @@ class SettingsPage extends StatelessWidget {
   final SettingsController settings;
   final int entryCount;
   final VoidCallback onBack, onExport, onImport, onWipe;
+
+  /// Ligar a digital pede um toque no sensor; por isso a ação vem de fora.
+  final VoidCallback onToggleBiometrics;
 
   static const _rowDivider = HairlineDivider(margin: EdgeInsets.only(left: SettingsRow.dividerIndent));
 
@@ -77,7 +81,7 @@ class SettingsPage extends StatelessWidget {
                           ),
                           title: AppStrings.biometricsTitle,
                           subtitle: preferences.biometricsEnabled ? AppStrings.biometricsOn : AppStrings.biometricsOff,
-                          onTap: settings.toggleBiometrics,
+                          onTap: onToggleBiometrics,
                           trailing: ToggleSwitch(value: preferences.biometricsEnabled),
                         ),
                       ],

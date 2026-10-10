@@ -21,7 +21,8 @@ class VaultBackupActions {
   final FileTransferService files;
 
   /// Pede uma senha, criptografa o backup com ela e deixa o usuário escolher onde salvar.
-  Future<void> export(BuildContext context) async {
+  /// Retorna true se o arquivo foi salvo.
+  Future<bool> export(BuildContext context) async {
     final password = await PasswordPromptDialog.show(
       context,
       const PasswordPromptData(
@@ -32,7 +33,7 @@ class VaultBackupActions {
         minLength: AppConfig.minBackupPasswordLength,
       ),
     );
-    if (password == null || !context.mounted) return;
+    if (password == null || !context.mounted) return false;
 
     final count = vault.entries.length;
     try {
@@ -47,9 +48,11 @@ class VaultBackupActions {
         content: content,
       );
       if (saved) toast.show(AppStrings.exportDone(count));
+      return saved;
     } on Object catch (error, stackTrace) {
       AppLogger.error('VaultBackupActions.export', error, stackTrace);
       toast.show(AppStrings.exportFailed);
+      return false;
     }
   }
 
@@ -114,7 +117,7 @@ class VaultBackupActions {
       ConfirmDialogData(
         icon: Symbols.warning_rounded,
         title: forgotMasterKey ? AppStrings.forgotKeyDialogTitle : AppStrings.wipeDialogTitle,
-        message: forgotMasterKey ? AppStrings.forgotKeyDialogMessage(count) : AppStrings.wipeDialogMessage(count),
+        message: forgotMasterKey ? AppStrings.forgotKeyDialogMessage : AppStrings.wipeDialogMessage(count),
         confirmLabel: AppStrings.wipeAction,
         confirmationWord: AppStrings.wipeConfirmationWord,
         confirmationHint: AppStrings.wipeConfirmationHint,

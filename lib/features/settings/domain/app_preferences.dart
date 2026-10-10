@@ -8,6 +8,8 @@ class AppPreferences {
     this.themeMode = AppThemeMode.dark,
     this.autoLockMinutes = AppConfig.defaultAutoLockMinutes,
     this.biometricsEnabled = true,
+    this.lastBackupAt,
+    this.backupReminderSnoozedUntil,
   });
 
   final AppThemeMode themeMode;
@@ -16,9 +18,23 @@ class AppPreferences {
   final int autoLockMinutes;
   final bool biometricsEnabled;
 
-  AppPreferences copyWith({AppThemeMode? themeMode, int? autoLockMinutes, bool? biometricsEnabled}) => AppPreferences(
+  /// Última exportação concluída. Null se nunca houve backup.
+  final DateTime? lastBackupAt;
+
+  /// Até quando o lembrete de backup fica escondido ("Depois").
+  final DateTime? backupReminderSnoozedUntil;
+
+  AppPreferences copyWith({
+    AppThemeMode? themeMode,
+    int? autoLockMinutes,
+    bool? biometricsEnabled,
+    DateTime? lastBackupAt,
+    DateTime? backupReminderSnoozedUntil,
+  }) => AppPreferences(
     themeMode: themeMode ?? this.themeMode,
     autoLockMinutes: autoLockMinutes ?? this.autoLockMinutes,
     biometricsEnabled: biometricsEnabled ?? this.biometricsEnabled,
+    lastBackupAt: lastBackupAt ?? this.lastBackupAt,
+    backupReminderSnoozedUntil: backupReminderSnoozedUntil ?? this.backupReminderSnoozedUntil,
   );
 }

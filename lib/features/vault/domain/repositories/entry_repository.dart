@@ -1,3 +1,4 @@
+import '../../../../core/security/vault_key.dart';
 import '../entities/entry.dart';
 
 /// Falha ao ler as senhas salvas (dados corrompidos ou ilegíveis).
@@ -5,10 +6,13 @@ class EntryStorageFailure implements Exception {
   const EntryStorageFailure();
 }
 
-/// Persistência das senhas.
+/// Persistência das senhas, cifradas com a chave do cofre.
 abstract interface class EntryRepository {
-  /// Lança [EntryStorageFailure] se os dados salvos não puderem ser lidos.
-  Future<List<Entry>> loadAll();
+  /// Lança [EntryStorageFailure] se os dados salvos não puderem ser lidos com [key].
+  Future<List<Entry>> loadAll(VaultKey key);
 
-  Future<void> saveAll(List<Entry> entries);
+  Future<void> saveAll(List<Entry> entries, VaultKey key);
+
+  /// Apaga tudo, inclusive cópias e dados da versão anterior. Não precisa da chave.
+  Future<void> deleteAll();
 }

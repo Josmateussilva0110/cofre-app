@@ -6,16 +6,16 @@ import '../../domain/entities/entry.dart';
 import '../../domain/repositories/entry_repository.dart';
 import '../dtos/entry_dto.dart';
 
-/// Guarda as senhas como JSON no armazenamento seguro.
-class SecureEntryRepository implements EntryRepository {
-  const SecureEntryRepository(this._store);
+/// Senhas no formato da versão anterior (JSON no armazenamento seguro, sem a chave mestre). Só é lido para migrar.
+class LegacyEntryStore {
+  const LegacyEntryStore(this._store);
 
   final KeyValueStore _store;
 
-  @override
-  Future<List<Entry>> loadAll() async {
-    final raw = await _store.read(AppConfig.entriesStorageKey);
-    if (raw == null) return const [];
+  /// Retorna null se não há dados antigos. Lança [EntryStorageFailure] se eles existirem mas forem ilegíveis.
+  Future<List<Entry>?> read() async {
+    final raw = await _store.read(AppConfig.legacyEntriesStorageKey);
+    if (raw == null) return null;
     try {
       final decoded = jsonDecode(raw);
       if (decoded is! List) throw const EntryStorageFailure();
@@ -25,7 +25,5 @@ class SecureEntryRepository implements EntryRepository {
     }
   }
 
-  @override
-  Future<void> saveAll(List<Entry> entries) =>
-      _store.write(AppConfig.entriesStorageKey, jsonEncode(entries.map(EntryDto.toJson).toList()));
+  Future<void> delete() => _store.delete(AppConfig.legacyEntriesStorageKey);
 }
