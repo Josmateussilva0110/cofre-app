@@ -88,8 +88,6 @@ abstract final class AppStrings {
   static const passwordsTitle = 'Senhas';
   static const passwordsUnit = 'senhas';
   static const searchHint = 'Buscar senhas';
-  static const layoutWallet = 'Carteira';
-  static const layoutGrouped = 'Agrupada A–Z';
   static const allStrong = 'tudo forte';
   static const nothingFound = 'Nada encontrado';
   static const nothingFoundHint = 'Tente outro termo de busca.';
@@ -99,7 +97,6 @@ abstract final class AppStrings {
   static const loadFailedHint = 'Seus dados não foram alterados. Feche e abra o app novamente.';
   static const moreOptions = 'Mais opções';
   static const noUrl = 'Sem URL';
-  static const cardUsernameLabel = 'USUÁRIO';
 
   static String weakCount(int count) => '$count ${count > 1 ? 'fracas' : 'fraca'}';
   static String groupCount(int count) => '$count ${count > 1 ? 'senhas' : 'senha'}';

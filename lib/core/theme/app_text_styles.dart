@@ -12,7 +12,6 @@ class AppTextStyles extends ThemeExtension<AppTextStyles> {
     required this.headline,
     required this.title,
     required this.titleSmall,
-    required this.cardTitle,
     required this.emptyTitle,
     required this.headerTitle,
     required this.button,
@@ -39,8 +38,6 @@ class AppTextStyles extends ThemeExtension<AppTextStyles> {
     required this.monogramSmall,
     required this.monogramLarge,
     required this.mono,
-    required this.monoCardDots,
-    required this.monoCardLabel,
   });
 
   factory AppTextStyles.from(AppFonts fonts) => AppTextStyles._(
@@ -48,7 +45,6 @@ class AppTextStyles extends ThemeExtension<AppTextStyles> {
     headline: const TextStyle(fontSize: 26, fontWeight: FontWeight.w700, letterSpacing: -.52),
     title: const TextStyle(fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -.21),
     titleSmall: const TextStyle(fontSize: 19, fontWeight: FontWeight.w700),
-    cardTitle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: -.18),
     emptyTitle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
     headerTitle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
     button: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
@@ -75,18 +71,16 @@ class AppTextStyles extends ThemeExtension<AppTextStyles> {
     monogramSmall: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
     monogramLarge: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
     mono: fonts.mono(const TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
-    monoCardDots: fonts.mono(const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, letterSpacing: 2.56)),
-    monoCardLabel: fonts.mono(const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 1.2)),
   );
 
-  final TextStyle display, headline, title, titleSmall, cardTitle, emptyTitle, headerTitle, button;
+  final TextStyle display, headline, title, titleSmall, emptyTitle, headerTitle, button;
   final TextStyle input, masterKeyInput, confirmationInput, multilineInput;
   final TextStyle groupLetter, bodyLarge, bodyLargeStrong, bodyLargeBold;
   final TextStyle body, bodyMedium, bodyStrong, bodyBold, paragraph;
   final TextStyle caption, captionStrong, captionBold;
   final TextStyle label, labelStrong, labelBold, overline;
   final TextStyle monogramSmall, monogramLarge;
-  final TextStyle mono, monoCardDots, monoCardLabel;
+  final TextStyle mono;
 
   // Os estilos não variam entre claro e escuro, então não há interpolação.
   @override

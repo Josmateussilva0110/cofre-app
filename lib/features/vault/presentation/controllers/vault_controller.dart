@@ -10,9 +10,7 @@ import '../../domain/repositories/entry_repository.dart';
 /// [locked]: sem chave do cofre, nada em memória. [loadFailed]: o arquivo não pôde ser lido com a chave.
 enum VaultStatus { locked, loading, ready, loadFailed }
 
-enum EntryListLayout { wallet, grouped }
-
-/// Senhas que começam com a mesma letra (layout "Agrupada A–Z").
+/// Senhas que começam com a mesma letra.
 class EntryGroup {
   const EntryGroup({required this.letter, required this.entries});
 
@@ -20,7 +18,7 @@ class EntryGroup {
   final List<Entry> entries;
 }
 
-/// Estado da lista de senhas: carregamento, busca, layout e operações de escrita.
+/// Estado da lista de senhas: carregamento, busca e operações de escrita.
 ///
 /// O cofre é local e pequeno, então a busca roda em memória; não há backend para paginar ou filtrar.
 class VaultController extends ChangeNotifier {
@@ -38,7 +36,6 @@ class VaultController extends ChangeNotifier {
   VaultKey? _key;
   List<Entry> _entries = const [];
   String _query = '';
-  EntryListLayout _layout = EntryListLayout.wallet;
 
   List<Entry> _visibleEntries = const [];
   List<EntryGroup>? _groupedEntries;
@@ -51,7 +48,6 @@ class VaultController extends ChangeNotifier {
   bool get isWritable => _status == VaultStatus.ready;
   List<Entry> get entries => _entries;
   String get query => _query;
-  EntryListLayout get layout => _layout;
   int get weakCount => _weakCount;
 
   /// Senhas que batem com a busca, na ordem do cofre (mais recentes primeiro).
@@ -98,12 +94,6 @@ class VaultController extends ChangeNotifier {
     if (query == _query) return;
     _query = query;
     _refreshDerived();
-  }
-
-  void setLayout(EntryListLayout layout) {
-    if (layout == _layout) return;
-    _layout = layout;
-    notifyListeners();
   }
 
   Entry? findById(String id) {

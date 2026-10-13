@@ -7,14 +7,12 @@ import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/theme_context.dart';
 import '../controllers/vault_controller.dart';
 import '../widgets/grouped_entry_list.dart';
-import '../widgets/list_layout_toggle.dart';
 import '../widgets/vault_empty_state.dart';
 import '../widgets/vault_header.dart';
 import '../widgets/vault_search_bar.dart';
-import '../widgets/wallet_stack.dart';
 import 'entry_actions.dart';
 
-/// Tela principal: lista de senhas com busca e escolha de layout.
+/// Tela principal: lista de senhas agrupada por letra, com busca.
 class VaultPage extends StatefulWidget {
   const VaultPage({super.key, required this.vault, required this.actions, required this.onLock, this.notice});
 
@@ -64,15 +62,7 @@ class _VaultPageState extends State<VaultPage> {
               ),
             Padding(
               padding: const EdgeInsets.fromLTRB(AppSpacing.s16, 0, AppSpacing.s16, AppSpacing.s12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: VaultSearchBar(controller: _query, onChanged: vault.search),
-                  ),
-                  const SizedBox(width: AppSpacing.s8),
-                  ListLayoutToggle(selected: vault.layout, onChanged: vault.setLayout),
-                ],
-              ),
+              child: VaultSearchBar(controller: _query, onChanged: vault.search),
             ),
             Expanded(
               child: _EntryList(vault: vault, actions: widget.actions),
@@ -126,22 +116,12 @@ class _EntryList extends StatelessWidget {
       );
     }
 
-    return switch (vault.layout) {
-      EntryListLayout.wallet => SingleChildScrollView(
-        padding: padding,
-        child: WalletStack(
-          entries: entries,
-          onOpen: (entry) => actions.showDetail(context, entry),
-          onMenu: (entry, anchor) => actions.showMenu(context, entry, anchor),
-        ),
-      ),
-      EntryListLayout.grouped => GroupedEntryList(
-        groups: vault.groupedEntries,
-        padding: padding,
-        onOpen: (entry) => actions.showDetail(context, entry),
-        onCopy: actions.copyPassword,
-        onMenu: (entry, anchor) => actions.showMenu(context, entry, anchor),
-      ),
-    };
+    return GroupedEntryList(
+      groups: vault.groupedEntries,
+      padding: padding,
+      onOpen: (entry) => actions.showDetail(context, entry),
+      onCopy: actions.copyPassword,
+      onMenu: (entry, anchor) => actions.showMenu(context, entry, anchor),
+    );
   }
 }

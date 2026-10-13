@@ -12,7 +12,7 @@ import '../../domain/entities/entry.dart';
 import 'entry_monogram.dart';
 import 'strength_bars.dart';
 
-/// Linha de uma senha no layout agrupado.
+/// Linha de uma senha na lista agrupada.
 class EntryRow extends StatelessWidget {
   const EntryRow({
     super.key,

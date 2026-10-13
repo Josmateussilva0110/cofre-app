@@ -134,24 +134,12 @@ class AppColors extends ThemeExtension<AppColors> {
   /// Cor de texto/barra para um matiz de força de senha.
   Color strength(double hue) => isDark ? oklch(0.74, 0.15, hue) : oklch(0.6, 0.15, hue);
 
-  /// Versão mais brilhante, usada sobre o fundo colorido do cartão.
-  Color strengthOnCard(double hue) => oklch(0.85, 0.16, hue);
-
   /// Monograma de uma senha (letra e fundo).
   Color monogram(double hue) => isDark ? oklch(0.8, 0.12, hue) : oklch(0.52, 0.14, hue);
   Color monogramSoft(double hue) => isDark ? oklch(0.5, 0.1, hue, 0.35) : oklch(0.9, 0.05, hue);
 
   /// Amostra de cor no seletor do formulário.
   Color swatch(double hue) => oklch(0.7, 0.13, hue);
-
-  /// Fundo do cartão no layout "carteira".
-  LinearGradient walletCard(double hue) => LinearGradient(
-    begin: const Alignment(-1, -0.6),
-    end: const Alignment(1, 0.6),
-    colors: isDark
-        ? [oklch(0.58, 0.12, hue), oklch(0.36, 0.09, hue + 25)]
-        : [oklch(0.68, 0.13, hue), oklch(0.5, 0.12, hue + 25)],
-  );
 
   // A paleta é sempre criada pelas fábricas `dark`/`light`; não há variações parciais.
   @override
@@ -191,27 +179,4 @@ class AppColors extends ThemeExtension<AppColors> {
       switchThumb: c(switchThumb, other.switchThumb),
     );
   }
-}
-
-/// Cores fixas do cartão "carteira": ficam sobre um gradiente colorido, então não mudam com o tema.
-abstract final class WalletCardColors {
-  static const content = Colors.white;
-  static const contentShadow = Color.fromRGBO(0, 0, 0, .18);
-  static const bubbleFill = Color.fromRGBO(255, 255, 255, .09);
-  static const bubbleBorder = Color.fromRGBO(255, 255, 255, .16);
-  static const bubbleShade = Color.fromRGBO(0, 0, 0, .12);
-  static const innerBorder = Color.fromRGBO(255, 255, 255, .14);
-  static const transparentWhite = Color(0x00FFFFFF);
-  static const holoSoft = Color.fromRGBO(255, 255, 255, .07);
-  static const holoPeak = Color.fromRGBO(255, 255, 255, .26);
-  static const shine = Color.fromRGBO(255, 255, 255, .7);
-  static const badgeTop = Color.fromRGBO(255, 255, 255, .34);
-  static const badgeBottom = Color.fromRGBO(255, 255, 255, .1);
-  static const badgeBorder = Color.fromRGBO(255, 255, 255, .3);
-  static const buttonFill = Color.fromRGBO(0, 0, 0, .18);
-  static const buttonBorder = Color.fromRGBO(255, 255, 255, .18);
-  static const pillFill = Color.fromRGBO(0, 0, 0, .26);
-  static const chipGold = [Color(0xFFF6E7B4), Color(0xFFD4B061), Color(0xFFA8843A)];
-  static const chipLine = Color.fromRGBO(0, 0, 0, .22);
-  static const chipBorder = Color.fromRGBO(0, 0, 0, .18);
 }

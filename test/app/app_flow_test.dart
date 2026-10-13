@@ -111,12 +111,8 @@ void main() {
     expect(find.text('Digital reconhecida'), findsOneWidget);
   });
 
-  appTest('busca, layout agrupado, detalhe e exclusão', (tester, app) async {
+  appTest('busca, detalhe e exclusão', (tester, app) async {
     await unlockWithKey(tester);
-
-    await tester.tap(find.bySemanticsLabel('Agrupada A–Z'));
-    await tester.pumpAndSettle();
-    expect(app.dependencies.vault.layout, EntryListLayout.grouped);
 
     await tester.enterText(find.byType(TextField), 'git');
     await tester.pumpAndSettle();
@@ -139,8 +135,6 @@ void main() {
 
   appTest('copiar senha pela lista agrupada', (tester, app) async {
     await unlockWithKey(tester);
-    await tester.tap(find.bySemanticsLabel('Agrupada A–Z'));
-    await tester.pumpAndSettle();
 
     await tester.tap(find.bySemanticsLabel('Copiar senha').first);
     await tester.pump();
@@ -259,8 +253,6 @@ void main() {
 
   appTest('editar pelo menu reaproveita o formulário com os valores atuais', (tester, app) async {
     await unlockWithKey(tester);
-    await tester.tap(find.bySemanticsLabel('Agrupada A–Z'));
-    await tester.pumpAndSettle();
 
     await tester.tap(find.bySemanticsLabel('Mais opções').first);
     await tester.pumpAndSettle();

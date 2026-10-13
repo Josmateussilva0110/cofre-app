@@ -9,7 +9,7 @@ import '../../domain/entities/entry.dart';
 import '../controllers/vault_controller.dart';
 import 'entry_row.dart';
 
-/// Lista agrupada por letra (layout "Agrupada A–Z").
+/// Lista de senhas agrupada por letra.
 class GroupedEntryList extends StatelessWidget {
   const GroupedEntryList({
     super.key,
