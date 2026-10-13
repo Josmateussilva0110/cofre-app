@@ -51,7 +51,8 @@ class DialogFrame extends StatelessWidget {
                     borderRadius: BorderRadius.circular(AppRadius.r30),
                     border: Border.all(color: colors.border),
                   ),
-                  child: child,
+                  // Rola quando o conteúdo não cabe (tela pequena ou teclado aberto).
+                  child: SingleChildScrollView(child: child),
                 ),
               ),
             ),

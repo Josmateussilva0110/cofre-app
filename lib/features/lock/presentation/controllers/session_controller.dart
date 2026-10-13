@@ -1,11 +1,14 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 
 import '../../../../core/config/app_config.dart';
 import '../../../../core/feedback/toast_controller.dart';
 import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/security/lock_suspension.dart';
+import '../../../../core/security/secret_policy.dart';
 import '../../../../core/security/vault_key.dart';
+import '../../../../core/services/device_clock.dart';
 import '../../../../core/utils/app_logger.dart';
 import '../../domain/biometric_key_store.dart';
 import '../../domain/unlock_attempts.dart';
@@ -14,12 +17,13 @@ import '../../domain/vault_key_repository.dart';
 /// Ainda não há chave mestre (primeiro uso ou cofre apagado) ou há uma chave a conferir.
 enum LockMode { createKey, enterKey }
 
-enum MasterKeyError { tooShort, mismatch, wrongKey, lockedOut }
+enum MasterKeyError { requirementsMissing, mismatch, wrongKey, lockedOut }
 
-/// Estado da sessão: criação e verificação da chave mestre, digital, bloqueio por inatividade e limite de tentativas.
+/// Estado da sessão: criação e verificação da chave mestre, digital, bloqueio por inatividade ou em segundo plano e
+/// limite de tentativas.
 ///
 /// É dona da chave do cofre enquanto está desbloqueada: entrega a chave em [_onUnlocked] e a descarta ao bloquear.
-class SessionController extends ChangeNotifier {
+class SessionController extends ChangeNotifier with WidgetsBindingObserver {
   SessionController({
     required this._keys,
     required this._toast,
@@ -28,8 +32,12 @@ class SessionController extends ChangeNotifier {
     required this._setBiometricsEnabled,
     required this._onUnlocked,
     required this._onLocked,
+    LockSuspension? lockSuspension,
+    DeviceClock? deviceClock,
     DateTime Function() clock = DateTime.now,
-  }) : _clock = clock,
+  }) : _lockSuspension = lockSuspension ?? LockSuspension(),
+       _deviceClock = deviceClock ?? PlatformDeviceClock(),
+       _clock = clock,
        _lastActivity = clock();
 
   static const _lockoutTick = Duration(seconds: 1);
@@ -52,6 +60,10 @@ class SessionController extends ChangeNotifier {
   final void Function(bool enabled) _setBiometricsEnabled;
   final Future<void> Function(VaultKey key) _onUnlocked;
   final VoidCallback _onLocked;
+  final LockSuspension _lockSuspension;
+
+  /// Conta a espera depois de erros (não pode ser burlado adiantando a data). [_clock] serve ao resto.
+  final DeviceClock _deviceClock;
   final DateTime Function() _clock;
 
   KeySetup _setup = KeySetup.none;
@@ -59,13 +71,22 @@ class SessionController extends ChangeNotifier {
   bool _isScanning = false;
   bool _isBusy = false;
   bool _hasBiometricOffer = false;
+  bool _isStorageUnavailable = false;
   MasterKeyError? _keyError;
+  List<SecretRequirement> _missingRequirements = const [];
   UnlockAttempts _attempts = const UnlockAttempts();
   DateTime _lastActivity;
+
+  /// Quando o app foi para segundo plano com o cofre aberto (null se está em primeiro plano).
+  DateTime? _leftAppAt;
+  bool _isObservingLifecycle = false;
   Timer? _idleTimer;
   Timer? _lockoutTimer;
 
   bool get isLocked => _vaultKey == null;
+
+  /// O armazenamento seguro do aparelho (Keystore) não respondeu: não dá para saber se há chave nem conferi-la.
+  bool get isStorageUnavailable => _isStorageUnavailable;
   bool get isScanning => _isScanning;
 
   /// Verificando ou criando a chave (a derivação leva alguns segundos).
@@ -78,21 +99,52 @@ class SessionController extends ChangeNotifier {
   bool get hasBiometricOffer => _hasBiometricOffer;
 
   /// Tempo até poder tentar de novo, ou null se não há bloqueio.
-  Duration? get lockoutRemaining => _attempts.remainingLockout(_clock());
+  Duration? get lockoutRemaining => _attempts.remainingLockout(_deviceClock.now());
+
+  /// O que faltou na última chave mestre recusada ([MasterKeyError.requirementsMissing]).
+  List<SecretRequirement> get missingRequirements => _missingRequirements;
 
   MasterKeyError? get keyError => lockoutRemaining != null ? MasterKeyError.lockedOut : _keyError;
 
+  /// Também serve para tentar de novo depois de [isStorageUnavailable].
   Future<void> load() async {
-    _setup = await _keys.setup();
-    _attempts = await _keys.loadAttempts();
+    try {
+      await _deviceClock.sync();
+      _setup = await _keys.setup();
+      final attempts = await _keys.loadAttempts();
+      _attempts = attempts.reanchored(_deviceClock.now());
+      if (!identical(_attempts, attempts)) await _saveAttempts(_attempts);
+      _isStorageUnavailable = false;
+    } on Object catch (error, stackTrace) {
+      AppLogger.error('SessionController.load', error, stackTrace);
+      _isStorageUnavailable = true;
+    }
     _syncLockoutTimer();
     notifyListeners();
   }
 
-  /// Começa a vigiar a inatividade.
+  /// Começa a vigiar a inatividade e a saída do app.
   void start() {
     _idleTimer?.cancel();
     _idleTimer = Timer.periodic(AppConfig.idleCheckInterval, (_) => _checkIdle());
+    if (_isObservingLifecycle) return;
+    WidgetsBinding.instance.addObserver(this);
+    _isObservingLifecycle = true;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.hidden || AppLifecycleState.paused:
+        if (isLocked || _lockSuspension.isActive) return;
+        _leftAppAt ??= _clock();
+      case AppLifecycleState.resumed:
+        // Os timers podem ficar parados em segundo plano: confere ao voltar, antes de mostrar o cofre.
+        _lockIfAwayTooLong();
+        _leftAppAt = null;
+      case AppLifecycleState.inactive || AppLifecycleState.detached:
+        break;
+    }
   }
 
   /// Chamado a cada toque na tela.
@@ -101,6 +153,7 @@ class SessionController extends ChangeNotifier {
   void lock({String? message}) {
     final key = _vaultKey;
     _vaultKey = null;
+    _leftAppAt = null;
     _onLocked();
     key?.destroy();
     _isScanning = false;
@@ -113,7 +166,11 @@ class SessionController extends ChangeNotifier {
   /// Define a primeira chave mestre e desbloqueia. Retorna true se criou.
   Future<bool> createMasterKey(String masterKey, String confirmation) async {
     if (_isBusy || mode != LockMode.createKey) return false;
-    if (masterKey.length < AppConfig.minMasterKeyLength) return _fail(MasterKeyError.tooShort);
+    final missing = SecretPolicy.missing(masterKey, minLength: AppConfig.minMasterKeyLength);
+    if (missing.isNotEmpty) {
+      _missingRequirements = missing;
+      return _fail(MasterKeyError.requirementsMissing);
+    }
     if (masterKey != confirmation) return _fail(MasterKeyError.mismatch);
 
     _setBusy(true);
@@ -127,7 +184,7 @@ class SessionController extends ChangeNotifier {
       return false;
     }
     _setup = KeySetup.ready;
-    await _completeUnlock(key);
+    if (!await _completeUnlock(key)) return false;
     _toast.show(AppStrings.masterKeyCreated);
     _offerBiometricsIfNeeded();
     return true;
@@ -151,12 +208,12 @@ class SessionController extends ChangeNotifier {
 
     if (key == null) {
       _isBusy = false;
-      await _saveAttempts(_attempts.registerFailure(_clock()));
+      await _saveAttempts(_attempts.registerFailure(_deviceClock.now()));
       _syncLockoutTimer();
       return _fail(MasterKeyError.wrongKey);
     }
     if (_attempts.failures > 0) await _saveAttempts(const UnlockAttempts());
-    await _completeUnlock(key);
+    if (!await _completeUnlock(key)) return false;
     _offerBiometricsIfNeeded();
     return true;
   }
@@ -173,8 +230,7 @@ class SessionController extends ChangeNotifier {
       _isScanning = false;
       // O usuário pode ter desbloqueado com a chave enquanto a digital era lida.
       if (!isLocked) return key.destroy();
-      await _completeUnlock(key);
-      _toast.show(AppStrings.biometricRecognized);
+      if (await _completeUnlock(key)) _toast.show(AppStrings.biometricRecognized);
     } on BiometricKeyFailure catch (failure) {
       _isScanning = false;
       notifyListeners();
@@ -233,13 +289,25 @@ class SessionController extends ChangeNotifier {
     return key;
   }
 
-  Future<void> _completeUnlock(VaultKey key) async {
-    await _onUnlocked(key);
+  /// Abre o cofre com a chave. Se a leitura falhar (ex.: erro de disco), descarta a chave e continua bloqueado.
+  Future<bool> _completeUnlock(VaultKey key) async {
+    try {
+      await _onUnlocked(key);
+    } on Object catch (error, stackTrace) {
+      AppLogger.error('SessionController.completeUnlock', error, stackTrace);
+      _onLocked();
+      key.destroy();
+      _isBusy = false;
+      notifyListeners();
+      _toast.show(AppStrings.vaultOpenFailed);
+      return false;
+    }
     registerActivity();
     _vaultKey = key;
     _isBusy = false;
     _keyError = null;
     notifyListeners();
+    return true;
   }
 
   /// Se a digital está ligada nas preferências mas não há chave protegida por ela (primeiro uso, migração ou
@@ -331,11 +399,20 @@ class SessionController extends ChangeNotifier {
   }
 
   void _checkIdle() {
+    if (isLocked) return;
+    _lockIfAwayTooLong();
     final minutes = _autoLockMinutes();
     if (isLocked || minutes <= 0) return;
     if (_clock().difference(_lastActivity) > Duration(minutes: minutes)) {
       lock(message: AppStrings.lockedByInactivity);
     }
+  }
+
+  // Vale mesmo com o bloqueio por inatividade em "nunca".
+  void _lockIfAwayTooLong() {
+    final leftAt = _leftAppAt;
+    if (isLocked || leftAt == null) return;
+    if (_clock().difference(leftAt) >= AppConfig.backgroundLockDelay) lock(message: AppStrings.lockedInBackground);
   }
 
   /// Null quando não há o que avisar (o usuário cancelou).
@@ -351,6 +428,7 @@ class SessionController extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (_isObservingLifecycle) WidgetsBinding.instance.removeObserver(this);
     _idleTimer?.cancel();
     _lockoutTimer?.cancel();
     _vaultKey?.destroy();

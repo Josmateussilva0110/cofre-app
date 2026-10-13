@@ -22,6 +22,13 @@ void main() {
     expect(await store.read('a'), isNull);
   });
 
+  test('apagar remove o temporário de uma gravação interrompida', () async {
+    await store.writeAtomic('a', [1]);
+    await File('${directory.path}${Platform.pathSeparator}a.tmp').writeAsBytes([9]);
+    await store.delete('a');
+    expect(directory.listSync(), isEmpty);
+  });
+
   test('preserva a versão anterior e não deixa temporários', () async {
     await store.writeAtomic('a', [1], backupName: 'a.bak');
     await store.writeAtomic('a', [2], backupName: 'a.bak');

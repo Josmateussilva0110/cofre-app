@@ -10,6 +10,9 @@ abstract final class AppConfig {
   static const legacyStorageKey = 'cofre-v1';
   static const unlockAttemptsStorageKey = 'cofre-unlock-attempts-v1';
 
+  /// Número da última gravação do cofre, para perceber se o arquivo voltou para uma versão anterior.
+  static const vaultGenerationStorageKey = 'cofre-vault-generation-v1';
+
   /// Chave do cofre embrulhada pela chave mestre (e, opcionalmente, pela digital).
   static const vaultKeyStorageKey = 'cofre-vault-key-v1';
   static const biometricVaultKeyStorageKey = 'cofre-vault-key-biometric-v1';
@@ -28,8 +31,11 @@ abstract final class AppConfig {
   static const idleCheckInterval = Duration(seconds: 2);
   static const minMasterKeyLength = 8;
 
+  /// Tempo fora do app (segundo plano) até bloquear. Dá para ir colar uma senha e voltar.
+  static const backgroundLockDelay = Duration(seconds: 30);
+
   /// Opções de bloqueio automático, em minutos. 0 = nunca.
-  static const autoLockOptions = [1, 5, 15, 30, 0];
+  static const autoLockOptions = [1, 2, 5, 15, 30, 0];
   static const defaultAutoLockMinutes = 5;
 
   // Feedback.
@@ -46,6 +52,10 @@ abstract final class AppConfig {
   static const backupFileName = 'cofre-backup.json';
   static const backupMimeType = 'application/json';
   static const minBackupPasswordLength = 8;
+
+  /// Limites da importação, para um arquivo malicioso não esgotar a memória.
+  static const maxBackupFileBytes = 10 * 1024 * 1024;
+  static const maxImportEntries = 5000;
 
   /// Lembrete de backup: aparece a partir desta quantidade de senhas, se nunca houve backup ou o último é antigo.
   static const backupReminderMinEntries = 5;

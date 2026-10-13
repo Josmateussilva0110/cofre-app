@@ -8,6 +8,7 @@ abstract interface class BlobStore {
   /// anterior é preservada com esse nome.
   Future<void> writeAtomic(String name, List<int> bytes, {String? backupName});
 
+  /// Apaga o arquivo e qualquer temporário que tenha sobrado de uma gravação interrompida.
   Future<void> delete(String name);
 }
 
@@ -39,7 +40,8 @@ class FileBlobStore implements BlobStore {
 
   @override
   Future<void> delete(String name) async {
-    final file = await _file(name);
-    if (await file.exists()) await file.delete();
+    for (final file in [await _file(name), await _file('$name$_tempSuffix')]) {
+      if (await file.exists()) await file.delete();
+    }
   }
 }

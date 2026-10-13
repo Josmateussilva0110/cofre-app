@@ -3,9 +3,11 @@ import 'dart:convert';
 import '../../../core/config/app_config.dart';
 import '../../../core/security/key_derivation.dart';
 import '../../../core/security/key_value_store.dart';
+import '../../../core/security/memory_wipe.dart';
 import '../../../core/security/password_hasher.dart';
 import '../../../core/security/symmetric_cipher.dart';
 import '../../../core/security/vault_key.dart';
+import '../../../core/services/device_clock.dart';
 import '../../../core/utils/app_logger.dart';
 import '../domain/biometric_key_store.dart';
 import '../domain/unlock_attempts.dart';
@@ -38,8 +40,17 @@ class SecureVaultKeyRepository implements VaultKeyRepository {
   static const _mac = 'mac';
   static const _data = 'data';
   static const _iv = 'iv';
+  static const _keyAlias = 'alias';
   static const _failures = 'failures';
-  static const _lockedUntil = 'lockedUntil';
+  static const _lockoutMillis = 'lockoutMs';
+  static const _lockedAtBoot = 'lockedAtBoot';
+  static const _lockedAtSinceBootMillis = 'lockedAtSinceBootMs';
+
+  /// Formato anterior: data do sistema em que o bloqueio terminava.
+  static const _legacyLockedUntil = 'lockedUntil';
+
+  /// Boot que nunca coincide com o atual: o bloqueio salvo recomeça inteiro ao ser lido.
+  static const _unknownBoot = -1;
 
   @override
   Future<KeySetup> setup() async {
@@ -50,10 +61,17 @@ class SecureVaultKeyRepository implements VaultKeyRepository {
 
   @override
   Future<VaultKey> create(String masterKey) async {
-    final vaultKey = VaultKey(SymmetricCipher.newKey());
+    final newKey = SymmetricCipher.newKey();
+    final vaultKey = VaultKey(newKey);
+    wipeBytes(newKey);
     final salt = KeyDerivation.newSalt();
     final wrappingKey = await _keyDerivation.derive(masterKey, salt);
-    final box = await _cipher.seal(vaultKey.bytes, wrappingKey);
+    final SealedBox box;
+    try {
+      box = await _cipher.seal(vaultKey.bytes, wrappingKey);
+    } finally {
+      wipeBytes(wrappingKey);
+    }
     await _store.write(
       AppConfig.vaultKeyStorageKey,
       jsonEncode({
@@ -77,9 +95,11 @@ class SecureVaultKeyRepository implements VaultKeyRepository {
     if (stored == null) return null;
     final wrappingKey = await _keyDerivation.derive(masterKey, stored.salt, iterationsOverride: stored.iterations);
     try {
-      return VaultKey(await _cipher.open(stored.box, wrappingKey));
+      return _vaultKeyFrom(await _cipher.open(stored.box, wrappingKey));
     } on DecryptionFailure {
       return null;
+    } finally {
+      wipeBytes(wrappingKey);
     }
   }
 
@@ -100,7 +120,11 @@ class SecureVaultKeyRepository implements VaultKeyRepository {
     final wrapped = await _biometrics.wrap(key.bytes, texts);
     await _store.write(
       AppConfig.biometricVaultKeyStorageKey,
-      jsonEncode({_iv: base64Encode(wrapped.iv), _data: base64Encode(wrapped.cipherText)}),
+      jsonEncode({
+        _iv: base64Encode(wrapped.iv),
+        _data: base64Encode(wrapped.cipherText),
+        _keyAlias: ?wrapped.keyAlias,
+      }),
     );
   }
 
@@ -109,7 +133,7 @@ class SecureVaultKeyRepository implements VaultKeyRepository {
     final wrapped = await _readBiometricKey();
     if (wrapped == null) throw const BiometricKeyFailure(BiometricKeyFailureReason.missing);
     try {
-      return VaultKey(await _biometrics.unwrap(wrapped, texts));
+      return _vaultKeyFrom(await _biometrics.unwrap(wrapped, texts));
     } on BiometricKeyFailure catch (failure) {
       // Chave invalidada pelo sistema (digital nova): a cópia guardada não pode mais ser aberta.
       if (failure.reason == BiometricKeyFailureReason.invalidated) await disableBiometrics();
@@ -135,19 +159,50 @@ class SecureVaultKeyRepository implements VaultKeyRepository {
   Future<UnlockAttempts> loadAttempts() async {
     final json = await _readJson(AppConfig.unlockAttemptsStorageKey);
     if (json == null) return const UnlockAttempts();
-    final failures = json[_failures];
-    final lockedUntil = json[_lockedUntil];
+    final failures = json[_failures] is int ? json[_failures] as int : 0;
+    final lockoutMillis = json[_lockoutMillis];
+    final boot = json[_lockedAtBoot];
+    final sinceBootMillis = json[_lockedAtSinceBootMillis];
+    if (lockoutMillis is int && boot is int && sinceBootMillis is int) {
+      return UnlockAttempts(
+        failures: failures,
+        lockout: Duration(milliseconds: lockoutMillis),
+        lockedAt: DeviceInstant(
+          bootId: boot,
+          sinceBoot: Duration(milliseconds: sinceBootMillis),
+        ),
+      );
+    }
+    // Formato anterior, ainda bloqueado pela data salva: como a data pode ter sido manipulada, a espera recomeça.
+    final legacyLockedUntil = json[_legacyLockedUntil];
+    final lockout = UnlockAttempts.lockoutFor(failures);
+    final isLegacyLocked =
+        legacyLockedUntil is int && DateTime.fromMillisecondsSinceEpoch(legacyLockedUntil).isAfter(DateTime.now());
+    if (lockout == null || !isLegacyLocked) return UnlockAttempts(failures: failures);
     return UnlockAttempts(
-      failures: failures is int ? failures : 0,
-      lockedUntil: lockedUntil is int ? DateTime.fromMillisecondsSinceEpoch(lockedUntil) : null,
+      failures: failures,
+      lockout: lockout,
+      lockedAt: const DeviceInstant(bootId: _unknownBoot, sinceBoot: Duration.zero),
     );
   }
 
   @override
   Future<void> saveAttempts(UnlockAttempts attempts) => _store.write(
     AppConfig.unlockAttemptsStorageKey,
-    jsonEncode({_failures: attempts.failures, _lockedUntil: attempts.lockedUntil?.millisecondsSinceEpoch}),
+    jsonEncode({
+      _failures: attempts.failures,
+      _lockoutMillis: ?attempts.lockout?.inMilliseconds,
+      _lockedAtBoot: ?attempts.lockedAt?.bootId,
+      _lockedAtSinceBootMillis: ?attempts.lockedAt?.sinceBoot.inMilliseconds,
+    }),
   );
+
+  /// A [VaultKey] guarda a própria cópia; a lista recebida é zerada.
+  static VaultKey _vaultKeyFrom(List<int> bytes) {
+    final key = VaultKey(bytes);
+    wipeBytes(bytes);
+    return key;
+  }
 
   Future<({int iterations, List<int> salt, SealedBox box})?> _readWrappedKey() async {
     final json = await _readJson(AppConfig.vaultKeyStorageKey);
@@ -155,7 +210,7 @@ class SecureVaultKeyRepository implements VaultKeyRepository {
     try {
       final kdf = json[_kdf] as Map<String, dynamic>;
       final iterations = kdf[_iterations] as int;
-      if (kdf[_algorithm] != KeyDerivation.algorithm || !KeyDerivation.isAcceptable(iterations)) return null;
+      if (kdf[_algorithm] != KeyDerivation.algorithm || !_keyDerivation.accepts(iterations)) return null;
       return (
         iterations: iterations,
         salt: base64Decode(kdf[_salt] as String),
@@ -178,6 +233,7 @@ class SecureVaultKeyRepository implements VaultKeyRepository {
       return BiometricWrappedKey(
         iv: base64Decode(json[_iv] as String),
         cipherText: base64Decode(json[_data] as String),
+        keyAlias: json[_keyAlias] as String?,
       );
     } on Object catch (error, stackTrace) {
       AppLogger.error('SecureVaultKeyRepository.readBiometricKey', error, stackTrace);

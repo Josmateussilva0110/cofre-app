@@ -7,8 +7,9 @@ import '../../../../core/theme/app_sizes.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/theme_context.dart';
 import '../../../../core/widgets/app_icon_button.dart';
+import '../../../../core/widgets/cofre_logo.dart';
 
-/// Topo da tela do cofre: emblema, resumo (total e fracas) e botão de bloquear.
+/// Topo da tela do cofre: logo, resumo (total e fracas) e botão de bloquear.
 class VaultHeader extends StatelessWidget {
   const VaultHeader({super.key, required this.totalCount, required this.weakCount, required this.onLock});
 
@@ -24,8 +25,9 @@ class VaultHeader extends StatelessWidget {
         Container(
           width: AppSizes.iconButtonLarge,
           height: AppSizes.iconButtonLarge,
+          alignment: Alignment.center,
           decoration: BoxDecoration(color: colors.accent, shape: BoxShape.circle),
-          child: Icon(Symbols.shield_lock_rounded, size: AppSizes.icon24, fill: 1, color: colors.onAccent),
+          child: CofreLogo(size: AppSizes.icon28, color: colors.onAccent),
         ),
         const SizedBox(width: AppSpacing.s8),
         Icon(Symbols.chevron_right_rounded, size: AppSizes.icon20, color: colors.faint),

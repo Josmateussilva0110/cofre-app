@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../l10n/app_strings.dart';
+import '../security/secret_policy.dart';
 import '../theme/app_decorations.dart';
 import '../theme/app_radius.dart';
 import '../theme/app_sizes.dart';
@@ -11,6 +12,8 @@ import 'app_icon_button.dart';
 import 'bare_field.dart';
 import 'dialog_frame.dart';
 import 'overlay_route.dart';
+import 'secret_requirements_list.dart';
+import 'strength_meter.dart';
 
 /// Conteúdo do diálogo que pede uma senha.
 class PasswordPromptData {
@@ -20,6 +23,7 @@ class PasswordPromptData {
     required this.confirmLabel,
     this.requireConfirmation = false,
     this.minLength = 1,
+    this.requireStrong = false,
     this.initialError,
   });
 
@@ -28,6 +32,9 @@ class PasswordPromptData {
   /// Pede a senha duas vezes (ao criar uma senha nova).
   final bool requireConfirmation;
   final int minLength;
+
+  /// Aplica a [SecretPolicy] e mostra a força e os requisitos ao digitar (senha nova que protege o cofre).
+  final bool requireStrong;
 
   /// Erro já exibido ao abrir (ex.: "senha incorreta" ao tentar de novo).
   final String? initialError;
@@ -66,13 +73,20 @@ class _PasswordPromptDialogState extends State<PasswordPromptDialog> {
   void _submit() {
     final data = widget.data;
     final password = _password.text;
-    final error = password.length < data.minLength
-        ? AppStrings.passwordTooShort(data.minLength)
-        : data.requireConfirmation && _confirmation.text != password
-        ? AppStrings.passwordsDoNotMatch
-        : null;
+    final error =
+        _policyError(password) ??
+        (data.requireConfirmation && _confirmation.text != password ? AppStrings.passwordsDoNotMatch : null);
     if (error != null) return setState(() => _error = error);
     Navigator.of(context).pop(password);
+  }
+
+  String? _policyError(String password) {
+    final data = widget.data;
+    if (!data.requireStrong) {
+      return password.length < data.minLength ? AppStrings.passwordTooShort(data.minLength) : null;
+    }
+    final missing = SecretPolicy.missing(password, minLength: data.minLength);
+    return missing.isEmpty ? null : AppStrings.missingRequirements(missing, data.minLength);
   }
 
   @override
@@ -106,6 +120,19 @@ class _PasswordPromptDialogState extends State<PasswordPromptDialog> {
             onSubmitted: data.requireConfirmation ? null : (_) => _submit(),
             onToggleVisibility: () => setState(() => _isVisible = !_isVisible),
           ),
+          if (data.requireStrong) ...[
+            const SizedBox(height: AppSpacing.s8),
+            ListenableBuilder(
+              listenable: _password,
+              builder: (context, _) => Column(
+                children: [
+                  StrengthMeter(password: _password.text),
+                  const SizedBox(height: AppSpacing.s8),
+                  SecretRequirementsList(secret: _password.text, minLength: data.minLength),
+                ],
+              ),
+            ),
+          ],
           if (data.requireConfirmation) ...[
             const SizedBox(height: AppSpacing.s10),
             _PasswordBox(
@@ -189,8 +216,8 @@ class _PasswordBox extends StatelessWidget {
               controller: controller,
               hint: hint,
               obscure: !isVisible,
+              secret: true,
               autofocus: autofocus,
-              autocorrect: false,
               style: context.textStyles.bodyLarge,
               onChanged: onChanged,
               onSubmitted: onSubmitted,

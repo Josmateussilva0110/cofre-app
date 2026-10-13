@@ -1,11 +1,11 @@
 import 'package:flutter/foundation.dart';
 
+import '../../../../core/security/password_strength.dart';
 import '../../../../core/security/vault_key.dart';
 import '../../domain/entities/entry.dart';
 import '../../domain/entities/entry_input.dart';
 import '../../domain/repositories/backup_codec.dart';
 import '../../domain/repositories/entry_repository.dart';
-import '../../domain/services/password_strength.dart';
 
 /// [locked]: sem chave do cofre, nada em memória. [loadFailed]: o arquivo não pôde ser lido com a chave.
 enum VaultStatus { locked, loading, ready, loadFailed }
@@ -34,6 +34,7 @@ class VaultController extends ChangeNotifier {
   final DateTime Function() _clock;
 
   VaultStatus _status = VaultStatus.locked;
+  bool _isOlderThanExpected = false;
   VaultKey? _key;
   List<Entry> _entries = const [];
   String _query = '';
@@ -44,6 +45,9 @@ class VaultController extends ChangeNotifier {
   int _weakCount = 0;
 
   VaultStatus get status => _status;
+
+  /// O cofre aberto é de uma versão anterior à última gravada (ver [LoadedEntries.isOlderThanExpected]).
+  bool get isOlderThanExpected => _isOlderThanExpected;
   bool get isWritable => _status == VaultStatus.ready;
   List<Entry> get entries => _entries;
   String get query => _query;
@@ -62,7 +66,9 @@ class VaultController extends ChangeNotifier {
     _status = VaultStatus.loading;
     notifyListeners();
     try {
-      _entries = await _repository.loadAll(key);
+      final loaded = await _repository.loadAll(key);
+      _entries = loaded.entries;
+      _isOlderThanExpected = loaded.isOlderThanExpected;
       _status = VaultStatus.ready;
     } on EntryStorageFailure {
       // Não sobrescreve os dados ilegíveis: o cofre fica somente leitura até ser apagado.
@@ -76,9 +82,16 @@ class VaultController extends ChangeNotifier {
   void close() {
     _key = null;
     _entries = const [];
+    _isOlderThanExpected = false;
     _query = '';
     _status = VaultStatus.locked;
     _refreshDerived();
+  }
+
+  void dismissOlderVersionWarning() {
+    if (!_isOlderThanExpected) return;
+    _isOlderThanExpected = false;
+    notifyListeners();
   }
 
   void search(String query) {

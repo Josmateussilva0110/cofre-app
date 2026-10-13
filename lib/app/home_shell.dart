@@ -13,6 +13,7 @@ import '../features/vault/domain/backup_reminder.dart';
 import '../features/vault/presentation/pages/entry_create_page.dart';
 import '../features/vault/presentation/pages/vault_page.dart';
 import '../features/vault/presentation/widgets/backup_reminder_banner.dart';
+import '../features/vault/presentation/widgets/older_version_banner.dart';
 import 'app_dependencies.dart';
 import 'widgets/bottom_nav.dart';
 
@@ -72,6 +73,11 @@ class _HomeShellState extends State<HomeShell> {
     if (await _deps.backupActions.export(context)) _deps.settings.recordBackup(DateTime.now());
   }
 
+  Widget? _notice() {
+    if (_deps.vault.isOlderThanExpected) return OlderVersionBanner(onDismiss: _deps.vault.dismissOlderVersionWarning);
+    return _backupReminder();
+  }
+
   Widget? _backupReminder() {
     final preferences = _deps.settings.preferences;
     final now = DateTime.now();
@@ -119,12 +125,8 @@ class _HomeShellState extends State<HomeShell> {
                 HomeTab.vault => ListenableBuilder(
                   key: const ValueKey(HomeTab.vault),
                   listenable: Listenable.merge([_deps.vault, _deps.settings]),
-                  builder: (context, _) => VaultPage(
-                    vault: _deps.vault,
-                    actions: _deps.entryActions,
-                    onLock: _lock,
-                    notice: _backupReminder(),
-                  ),
+                  builder: (context, _) =>
+                      VaultPage(vault: _deps.vault, actions: _deps.entryActions, onLock: _lock, notice: _notice()),
                 ),
                 HomeTab.settings => ListenableBuilder(
                   key: const ValueKey(HomeTab.settings),

@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
+import '../../../../core/config/app_config.dart';
 import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/security/secret_policy.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_shadows.dart';
-import '../../../../core/theme/app_sizes.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/theme_context.dart';
+import '../../../../core/widgets/cofre_logo.dart';
 import '../../../../core/widgets/hairline_divider.dart';
 import '../../../../core/widgets/primary_button.dart';
+import '../../../../core/widgets/secret_requirements_list.dart';
+import '../../../../core/widgets/strength_meter.dart';
 import '../../../../core/widgets/tap.dart';
 import '../controllers/session_controller.dart';
 import '../widgets/biometric_button.dart';
@@ -73,6 +76,7 @@ class _LockPageState extends State<LockPage> {
             listenable: widget.session,
             builder: (context, _) {
               final session = widget.session;
+              if (session.isStorageUnavailable) return _StorageUnavailable(onRetry: session.load);
               final isCreating = session.mode == LockMode.createKey;
               final error = session.keyError;
               return Column(
@@ -95,6 +99,11 @@ class _LockPageState extends State<LockPage> {
                   ),
                   if (isCreating) ...[
                     const SizedBox(height: AppSpacing.s10),
+                    ListenableBuilder(
+                      listenable: _key,
+                      builder: (context, _) => _NewKeyFeedback(secret: _key.text),
+                    ),
+                    const SizedBox(height: AppSpacing.s10),
                     MasterKeyField(
                       controller: _confirmation,
                       hint: AppStrings.masterKeyRepeatHint,
@@ -104,7 +113,14 @@ class _LockPageState extends State<LockPage> {
                       onSubmitted: (_) => _submit(),
                     ),
                   ],
-                  if (error != null) _KeyErrorText(message: _errorMessage(error, session.lockoutRemaining)),
+                  if (error != null)
+                    _KeyErrorText(
+                      message: _errorMessage(
+                        error,
+                        lockoutRemaining: session.lockoutRemaining,
+                        missingRequirements: session.missingRequirements,
+                      ),
+                    ),
                   const SizedBox(height: AppSpacing.s16),
                   PrimaryButton(label: _buttonLabel(session), isBusy: session.isBusy, onTap: _submit),
                   if (isCreating) ...[
@@ -143,12 +159,65 @@ class _LockPageState extends State<LockPage> {
     (LockMode.enterKey, false) => AppStrings.unlock,
   };
 
-  static String _errorMessage(MasterKeyError error, Duration? lockoutRemaining) => switch (error) {
-    MasterKeyError.tooShort => AppStrings.masterKeyTooShort,
+  static String _errorMessage(
+    MasterKeyError error, {
+    required Duration? lockoutRemaining,
+    required List<SecretRequirement> missingRequirements,
+  }) => switch (error) {
+    MasterKeyError.requirementsMissing => AppStrings.missingRequirements(
+      missingRequirements,
+      AppConfig.minMasterKeyLength,
+    ),
     MasterKeyError.mismatch => AppStrings.masterKeyMismatch,
     MasterKeyError.wrongKey => AppStrings.masterKeyWrong,
     MasterKeyError.lockedOut => AppStrings.masterKeyLockedOut(lockoutRemaining ?? Duration.zero),
   };
+}
+
+/// O Keystore falhou. Não oferece apagar o cofre: o erro costuma passar depois de reiniciar o aparelho.
+class _StorageUnavailable extends StatelessWidget {
+  const _StorageUnavailable({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      const _LockEmblem(),
+      const SizedBox(height: AppSpacing.s26),
+      Text(AppStrings.appName, style: context.textStyles.display),
+      const SizedBox(height: AppSpacing.s16),
+      Semantics(
+        liveRegion: true,
+        child: Text(
+          AppStrings.storageUnavailable,
+          textAlign: TextAlign.center,
+          style: context.textStyles.bodyLarge.copyWith(color: context.appColors.muted),
+        ),
+      ),
+      const SizedBox(height: AppSpacing.s28),
+      PrimaryButton(label: AppStrings.tryAgain, onTap: onRetry),
+    ],
+  );
+}
+
+/// Força e requisitos da chave mestre nova, atualizados enquanto o usuário digita.
+class _NewKeyFeedback extends StatelessWidget {
+  const _NewKeyFeedback({required this.secret});
+
+  final String secret;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s6),
+    child: Column(
+      children: [
+        StrengthMeter(password: secret),
+        const SizedBox(height: AppSpacing.s8),
+        SecretRequirementsList(secret: secret, minLength: AppConfig.minMasterKeyLength),
+      ],
+    ),
+  );
 }
 
 class _KeyErrorText extends StatelessWidget {
@@ -223,6 +292,9 @@ class _LockEmblem extends StatelessWidget {
   const _LockEmblem();
 
   static const _size = 88.0;
+
+  /// Mesma proporção do ícone do app (símbolo com ~64% do quadro).
+  static const _logoSize = 56.0;
   static const _glowBlur = 40.0;
   static const _glowOffset = 18.0;
 
@@ -237,7 +309,8 @@ class _LockEmblem extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.r28),
         boxShadow: AppShadows.glow(colors.glow, blurRadius: _glowBlur, offsetY: _glowOffset),
       ),
-      child: Icon(Symbols.lock_rounded, size: AppSizes.icon46, fill: 1, color: colors.onAccent),
+      alignment: Alignment.center,
+      child: CofreLogo(size: _logoSize, color: colors.onAccent),
     );
   }
 }

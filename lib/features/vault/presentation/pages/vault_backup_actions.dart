@@ -4,6 +4,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/feedback/toast_controller.dart';
 import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/services/device_auth_service.dart';
 import '../../../../core/services/file_transfer_service.dart';
 import '../../../../core/utils/app_logger.dart';
 import '../../../../core/widgets/confirm_dialog.dart';
@@ -14,11 +15,17 @@ import '../controllers/vault_controller.dart';
 
 /// Exportar, importar e apagar o cofre inteiro.
 class VaultBackupActions {
-  const VaultBackupActions({required this.vault, required this.toast, required this.files});
+  const VaultBackupActions({
+    required this.vault,
+    required this.toast,
+    required this.files,
+    this.deviceAuth = const DeviceAuthService(),
+  });
 
   final VaultController vault;
   final ToastController toast;
   final FileTransferService files;
+  final DeviceAuthService deviceAuth;
 
   /// Pede uma senha, criptografa o backup com ela e deixa o usuário escolher onde salvar.
   /// Retorna true se o arquivo foi salvo.
@@ -31,6 +38,7 @@ class VaultBackupActions {
         confirmLabel: AppStrings.exportPasswordAction,
         requireConfirmation: true,
         minLength: AppConfig.minBackupPasswordLength,
+        requireStrong: true,
       ),
     );
     if (password == null || !context.mounted) return false;
@@ -79,6 +87,7 @@ class VaultBackupActions {
         return toast.show(AppStrings.importDone(count));
       } on BackupFailure catch (failure) {
         if (failure.reason == BackupFailureReason.invalidFile) return toast.show(AppStrings.importInvalid);
+        if (failure.reason == BackupFailureReason.tooLarge) return toast.show(AppStrings.importTooLarge);
         if (!context.mounted) return;
         password = await PasswordPromptDialog.show(
           context,
@@ -101,6 +110,9 @@ class VaultBackupActions {
   Future<String?> _pickBackupFile() async {
     try {
       return await files.pickText();
+    } on FileTooLargeFailure {
+      toast.show(AppStrings.importTooLarge);
+      return null;
     } on Object catch (error, stackTrace) {
       AppLogger.error('VaultBackupActions.pickBackupFile', error, stackTrace);
       toast.show(AppStrings.importInvalid);
@@ -109,7 +121,8 @@ class VaultBackupActions {
   }
 
   /// Pede para digitar a palavra de confirmação e apaga tudo. Retorna true se apagou.
-  /// Com [forgotMasterKey], o texto explica que apagar é o único jeito de recomeçar sem a chave.
+  /// Com [forgotMasterKey], o texto explica que apagar é o único jeito de recomeçar sem a chave e, como o cofre
+  /// está bloqueado, também pede o bloqueio de tela do aparelho: quem pegar o celular não apaga tudo.
   Future<bool> confirmWipe(BuildContext context, {bool forgotMasterKey = false}) async {
     final count = vault.entries.length;
     final confirmed = await ConfirmDialog.show(
@@ -124,6 +137,7 @@ class VaultBackupActions {
       ),
     );
     if (!confirmed) return false;
+    if (forgotMasterKey && !await _confirmDeviceOwner()) return false;
     try {
       await vault.deleteAll();
     } on Object catch (error, stackTrace) {
@@ -132,5 +146,12 @@ class VaultBackupActions {
       return false;
     }
     return true;
+  }
+
+  // Sem bloqueio de tela no aparelho, a palavra de confirmação é a única barreira possível.
+  Future<bool> _confirmDeviceOwner() async {
+    final result = await deviceAuth.confirm(title: AppStrings.deviceAuthTitle, subtitle: AppStrings.deviceAuthSubtitle);
+    if (result == DeviceAuthResult.failed) toast.show(AppStrings.wipeNotConfirmed);
+    return result != DeviceAuthResult.failed;
   }
 }

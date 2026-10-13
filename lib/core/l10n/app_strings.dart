@@ -1,4 +1,5 @@
 import '../config/app_config.dart';
+import '../security/secret_policy.dart';
 
 /// Textos exibidos ao usuário (pt-BR). Nenhum texto de UI deve ficar solto nos widgets.
 abstract final class AppStrings {
@@ -25,7 +26,6 @@ abstract final class AppStrings {
   static const masterKeyHint = 'Chave mestre';
   static const unlock = 'Desbloquear';
   static const orSeparator = 'OU';
-  static const masterKeyTooShort = 'A chave mestre precisa ter ao menos ${AppConfig.minMasterKeyLength} caracteres.';
   static const masterKeyMismatch = 'As chaves não conferem.';
   static const masterKeyWrong = 'Chave mestre incorreta.';
   static String masterKeyLockedOut(Duration remaining) {
@@ -35,6 +35,11 @@ abstract final class AppStrings {
         : 'Muitas tentativas. Tente de novo em ${(seconds / 60).ceil()} min.';
   }
 
+  static const storageUnavailable =
+      'Não foi possível acessar o armazenamento seguro do aparelho. Reinicie o aparelho e tente de novo. '
+      'Suas senhas continuam guardadas.';
+  static const tryAgain = 'Tentar de novo';
+  static const vaultOpenFailed = 'Não foi possível abrir o cofre. Tente de novo.';
   static const createKeySubtitle = 'Crie uma chave mestre para proteger o cofre';
   static const masterKeyRepeatHint = 'Repita a chave mestre';
   static const createKeyAction = 'Criar chave mestre';
@@ -75,6 +80,7 @@ abstract final class AppStrings {
   static const biometricLockedOut = 'Biometria bloqueada — use a chave mestre';
   static const biometricUnavailable = 'Biometria indisponível no momento';
   static const lockedByInactivity = 'Bloqueado por inatividade';
+  static const lockedInBackground = 'Bloqueado ao sair do app';
   static const vaultLocked = 'Cofre bloqueado';
   static const lockAction = 'Bloquear';
 
@@ -175,6 +181,12 @@ abstract final class AppStrings {
   static const importDescription = 'Adiciona senhas de um backup';
   static String importDone(int count) => '$count senhas importadas';
   static const importInvalid = 'Arquivo inválido';
+  static const importTooLarge = 'Arquivo grande demais para importar';
+  static const olderVersionTitle = 'O cofre voltou para uma versão anterior';
+  static const olderVersionMessage =
+      'Alterações recentes podem ter se perdido. Isso acontece depois de uma falha ao salvar ou se o arquivo do '
+      'cofre foi trocado por uma cópia antiga. Confira suas senhas.';
+  static const understood = 'Entendi';
   static const backupReminderFirstTitle = 'Você ainda não fez backup';
   static const backupReminderStaleTitle = 'Seu backup está desatualizado';
   static const backupReminderMessage = 'Se esquecer a chave mestre, o backup é a única forma de recuperar suas senhas.';
@@ -195,6 +207,34 @@ abstract final class AppStrings {
   static const backupWrongPassword = 'Senha incorreta ou arquivo alterado.';
   static const passwordsDoNotMatch = 'As senhas não conferem.';
   static String passwordTooShort(int minLength) => 'Use ao menos $minLength caracteres.';
+
+  // Requisitos de senha forte (chave mestre e senha do backup).
+  static String secretRequirement(SecretRequirement requirement, int minLength) => switch (requirement) {
+    SecretRequirement.minLength => 'Pelo menos $minLength caracteres',
+    SecretRequirement.uppercase => 'Letra maiúscula (A-Z)',
+    SecretRequirement.lowercase => 'Letra minúscula (a-z)',
+    SecretRequirement.digit => 'Número (0-9)',
+    SecretRequirement.symbol => 'Símbolo (ex.: ! @ # -)',
+  };
+  static String secretRequirementSemantics(String label, {required bool isMet}) =>
+      '$label: ${isMet ? 'cumprido' : 'falta'}';
+  static String missingRequirements(List<SecretRequirement> missing, int minLength) {
+    final names = [
+      for (final requirement in missing)
+        switch (requirement) {
+          SecretRequirement.minLength => 'pelo menos $minLength caracteres',
+          SecretRequirement.uppercase => 'letra maiúscula',
+          SecretRequirement.lowercase => 'letra minúscula',
+          SecretRequirement.digit => 'número',
+          SecretRequirement.symbol => 'símbolo',
+        },
+    ];
+    final joined = names.length == 1
+        ? names.single
+        : '${names.sublist(0, names.length - 1).join(', ')} e ${names.last}';
+    return 'Falta: $joined.';
+  }
+
   static const encryptingBackup = 'Criptografando backup…';
   static const decryptingBackup = 'Abrindo backup…';
   static const dangerSection = 'Zona de perigo';
@@ -207,6 +247,9 @@ abstract final class AppStrings {
   static const wipeConfirmationWord = 'APAGAR';
   static const wipeConfirmationHint = 'Digite $wipeConfirmationWord';
   static const wipeAction = 'Apagar';
+  static const deviceAuthTitle = 'Confirme que é você';
+  static const deviceAuthSubtitle = 'Use o bloqueio de tela do aparelho para apagar o cofre';
+  static const wipeNotConfirmed = 'O cofre não foi apagado';
   static const vaultWiped = 'Cofre apagado';
   static const versionLabel = '${AppConfig.appName} · versão ${AppConfig.appVersion}';
 }

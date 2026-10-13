@@ -8,21 +8,26 @@ import '../utils/app_logger.dart';
 
 /// Área de transferência. Textos sensíveis (senhas) são apagados depois de [clearAfter].
 ///
-/// Só apaga se o conteúdo ainda for o que o app copiou, para não destruir algo que o usuário copiou depois.
-/// Como o Android não deixa ler a área de transferência com o app em segundo plano, se a verificação não for
-/// possível na hora ela é refeita quando o app volta ao primeiro plano.
+/// No Android a limpeza é feita pelo código nativo, que consegue apagar mesmo com o app em segundo plano.
+/// Nas outras plataformas fica aqui: só apaga se o conteúdo ainda for o que o app copiou e, se a leitura não for
+/// possível na hora, refaz a verificação quando o app volta ao primeiro plano.
 class ClipboardService with WidgetsBindingObserver {
   ClipboardService({
     this.clearAfter = AppConfig.clipboardClearDelay,
-    Future<void> Function(String text, {required bool sensitive})? write,
+    Future<bool> Function(String text, Duration clearAfter)? writeSensitive,
+    Future<void> Function(String text)? write,
     Future<String?> Function()? read,
-  }) : _write = write ?? _platformWrite,
+  }) : _writeSensitive = writeSensitive ?? _platformWriteSensitive,
+       _write = write ?? _platformWrite,
        _read = read ?? _platformRead;
 
   static const _channel = MethodChannel('cofre/secure_clipboard');
 
   final Duration clearAfter;
-  final Future<void> Function(String text, {required bool sensitive}) _write;
+
+  /// Retorna true se a plataforma vai apagar o texto sozinha depois de `clearAfter`.
+  final Future<bool> Function(String text, Duration clearAfter) _writeSensitive;
+  final Future<void> Function(String text) _write;
   final Future<String?> Function() _read;
 
   Timer? _clearTimer;
@@ -31,8 +36,8 @@ class ClipboardService with WidgetsBindingObserver {
 
   Future<void> copy(String text, {bool sensitive = false}) async {
     _cancelPending();
-    await _write(text, sensitive: sensitive);
-    if (!sensitive) return;
+    if (!sensitive) return _write(text);
+    if (await _writeSensitive(text, clearAfter)) return;
     _clearTimer = Timer(clearAfter, () => _clearIfUnchanged(text));
   }
 
@@ -56,7 +61,7 @@ class ClipboardService with WidgetsBindingObserver {
       _observeLifecycle();
       return;
     }
-    if (current == text) await _write('', sensitive: false);
+    if (current == text) await _write('');
     _cancelPending();
   }
 
@@ -78,17 +83,18 @@ class ClipboardService with WidgetsBindingObserver {
 
   void dispose() => _cancelPending();
 
-  static Future<void> _platformWrite(String text, {required bool sensitive}) async {
-    if (sensitive) {
-      try {
-        await _channel.invokeMethod<void>('copySensitive', {'text': text});
-        return;
-      } on MissingPluginException {
-        // Plataforma sem o canal nativo (ex.: iOS): usa a cópia comum.
-      }
+  static Future<bool> _platformWriteSensitive(String text, Duration clearAfter) async {
+    try {
+      await _channel.invokeMethod<void>('copySensitive', {'text': text, 'clearAfterMillis': clearAfter.inMilliseconds});
+      return true;
+    } on MissingPluginException {
+      // Plataforma sem o canal nativo (ex.: iOS): usa a cópia comum e a limpeza fica com o Dart.
+      await _platformWrite(text);
+      return false;
     }
-    await Clipboard.setData(ClipboardData(text: text));
   }
+
+  static Future<void> _platformWrite(String text) => Clipboard.setData(ClipboardData(text: text));
 
   static Future<String?> _platformRead() async => (await Clipboard.getData(Clipboard.kTextPlain))?.text;
 }

@@ -13,8 +13,13 @@ class SettingsController extends ChangeNotifier {
 
   AppPreferences get preferences => _preferences;
 
+  /// Se o armazenamento falhar, segue com as preferências padrão (a sessão é que avisa o usuário).
   Future<void> load() async {
-    _preferences = await _repository.load();
+    try {
+      _preferences = await _repository.load();
+    } on Object catch (error, stackTrace) {
+      AppLogger.error('SettingsController.load', error, stackTrace);
+    }
     notifyListeners();
   }
 

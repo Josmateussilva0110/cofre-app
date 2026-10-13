@@ -10,6 +10,9 @@ enum BackupFailureReason {
 
   /// Não é um backup do Cofre.
   invalidFile,
+
+  /// Arquivo ou quantidade de senhas acima do limite.
+  tooLarge,
 }
 
 class BackupFailure implements Exception {

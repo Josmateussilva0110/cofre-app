@@ -1,5 +1,5 @@
+import 'package:cofre/core/security/password_strength.dart';
 import 'package:cofre/features/vault/domain/services/password_generator.dart';
-import 'package:cofre/features/vault/domain/services/password_strength.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

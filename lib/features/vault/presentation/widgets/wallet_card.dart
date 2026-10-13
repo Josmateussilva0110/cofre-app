@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/security/password_strength.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_radius.dart';
@@ -11,10 +12,9 @@ import '../../../../core/theme/app_shadows.dart';
 import '../../../../core/theme/app_sizes.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/theme_context.dart';
+import '../../../../core/widgets/strength_presentation.dart';
 import '../../../../core/widgets/tap.dart';
 import '../../domain/entities/entry.dart';
-import '../../domain/services/password_strength.dart';
-import 'strength_presentation.dart';
 
 /// Cartão estilo "carteira": inclinado na pilha e com efeito 3D/holográfico enquanto o dedo está sobre ele.
 class WalletCard extends StatefulWidget {

@@ -24,7 +24,7 @@ class PasswordHasher {
   }
 
   Future<bool> verify(String password, PasswordHash stored) async {
-    if (!KeyDerivation.isAcceptable(stored.iterations)) return false;
+    if (!KeyDerivation.isWithinMax(stored.iterations)) return false;
     final candidate = await keyDerivation.derive(password, stored.salt, iterationsOverride: stored.iterations);
     return _constantTimeEquals(candidate, stored.hash);
   }

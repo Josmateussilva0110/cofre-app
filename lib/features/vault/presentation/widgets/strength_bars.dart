@@ -1,10 +1,10 @@
 import 'package:flutter/widgets.dart';
 
+import '../../../../core/security/password_strength.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/theme_context.dart';
-import '../../domain/services/password_strength.dart';
-import 'strength_presentation.dart';
+import '../../../../core/widgets/strength_presentation.dart';
 
 /// Quatro barrinhas que acendem conforme a pontuação da senha.
 class StrengthBars extends StatelessWidget {

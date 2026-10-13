@@ -3,7 +3,9 @@ import 'package:cofre/core/security/password_cipher.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  final cipher = PasswordCipher(keyDerivation: const KeyDerivation(iterations: 1000, runInIsolate: false));
+  final cipher = PasswordCipher(
+    keyDerivation: const KeyDerivation(iterations: 1000, minIterations: 1, runInIsolate: false),
+  );
 
   test('cifra e decifra com a mesma senha', () async {
     final payload = await cipher.encrypt('segredo', 'senha-forte');
@@ -47,8 +49,15 @@ void main() {
     expect(cipher.decrypt(abusive, 'senha'), throwsA(isA<DecryptionFailure>()));
   });
 
+  test('com o piso padrão, recusa arquivo com poucas iterações (fácil de quebrar)', () async {
+    final payload = await cipher.encrypt('segredo', 'senha');
+    const strict = KeyDerivation(iterations: 1000, runInIsolate: false);
+    expect(payload.iterations, lessThan(KeyDerivation.defaultMinIterations));
+    expect(PasswordCipher(keyDerivation: strict).decrypt(payload, 'senha'), throwsA(isA<DecryptionFailure>()));
+  });
+
   test('deriva a chave em isolate', () async {
-    final isolated = PasswordCipher(keyDerivation: const KeyDerivation(iterations: 1000));
+    final isolated = PasswordCipher(keyDerivation: const KeyDerivation(iterations: 1000, minIterations: 1));
     final payload = await isolated.encrypt('segredo', 'senha');
     expect(await isolated.decrypt(payload, 'senha'), 'segredo');
   });

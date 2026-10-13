@@ -10,6 +10,7 @@ class BareField extends StatelessWidget {
     required this.controller,
     required this.hint,
     this.obscure = false,
+    this.secret = false,
     this.onChanged,
     this.onSubmitted,
     this.style,
@@ -25,6 +26,10 @@ class BareField extends StatelessWidget {
   final TextEditingController controller;
   final String hint;
   final bool obscure;
+
+  /// Campo de senha, mesmo quando o texto está visível: o teclado não sugere, não corrige e não aprende o que
+  /// é digitado (teclados de terceiros podem guardar ou sincronizar o que aprendem).
+  final bool secret;
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
   final TextStyle? style;
@@ -39,20 +44,22 @@ class BareField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
+    final isSecret = secret || obscure;
     return TextField(
       controller: controller,
       obscureText: obscure,
       onChanged: onChanged,
       onSubmitted: onSubmitted,
       autofocus: autofocus,
-      keyboardType: keyboardType,
+      keyboardType: secret && !obscure ? TextInputType.visiblePassword : keyboardType,
       maxLines: obscure ? 1 : maxLines,
       minLines: obscure ? null : minLines,
       maxLength: maxLength,
       maxLengthEnforcement: MaxLengthEnforcement.enforced,
       textAlign: textAlign,
-      autocorrect: autocorrect && !obscure,
-      enableSuggestions: !obscure,
+      autocorrect: autocorrect && !isSecret,
+      enableSuggestions: !isSecret,
+      enableIMEPersonalizedLearning: !isSecret,
       cursorColor: colors.accent,
       style: (style ?? context.textStyles.input).copyWith(color: colors.text),
       decoration: InputDecoration(

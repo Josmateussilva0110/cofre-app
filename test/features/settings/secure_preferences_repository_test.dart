@@ -29,6 +29,13 @@ void main() {
     expect(loaded.backupReminderSnoozedUntil, snoozedUntil);
   });
 
+  test('aceita o bloqueio automático de 2 min', () async {
+    final store = InMemoryKeyValueStore();
+    final repository = SecurePreferencesRepository(store);
+    await repository.save(const AppPreferences(autoLockMinutes: 2));
+    expect((await repository.load()).autoLockMinutes, 2);
+  });
+
   test('entende os nomes de tema da versão anterior', () async {
     final store = InMemoryKeyValueStore({AppConfig.preferencesStorageKey: '{"themeMode":"claro"}'});
     expect((await SecurePreferencesRepository(store).load()).themeMode, AppThemeMode.light);

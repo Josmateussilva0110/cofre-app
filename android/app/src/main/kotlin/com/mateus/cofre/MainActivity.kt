@@ -1,12 +1,8 @@
 package com.mateus.cofre
 
-import android.content.ClipData
-import android.content.ClipDescription
-import android.content.ClipboardManager
-import android.content.Context
-import android.os.Build
 import android.os.Bundle
-import android.os.PersistableBundle
+import android.os.SystemClock
+import android.provider.Settings
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -24,29 +20,36 @@ class MainActivity : FlutterFragmentActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CLIPBOARD_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "copySensitive" -> {
-                    copySensitive(call.argument<String>("text") ?: "")
-                    result.success(null)
+                    val text = call.argument<String>("text") ?: ""
+                    val clearAfterMillis = call.argument<Number>("clearAfterMillis")?.toLong()
+                    if (clearAfterMillis == null) {
+                        result.error("bad_args", "clearAfterMillis ausente", null)
+                    } else {
+                        SensitiveClipboard.copy(this, text, clearAfterMillis)
+                        result.success(null)
+                    }
                 }
                 else -> result.notImplemented()
             }
         }
-        BiometricKeyChannel(this, flutterEngine.dartExecutor.binaryMessenger)
-    }
-
-    // No Android 13+ a marca "sensível" impede que o sistema mostre o texto na prévia de "copiado".
-    private fun copySensitive(text: String) {
-        val clip = ClipData.newPlainText(CLIP_LABEL, text)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            clip.description.extras = PersistableBundle().apply {
-                putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+        // Relógio que o usuário não ajusta: conta da espera depois de errar a chave mestre.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DEVICE_CLOCK_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "now" -> result.success(
+                    mapOf(
+                        "bootCount" to Settings.Global.getInt(contentResolver, Settings.Global.BOOT_COUNT, -1),
+                        "elapsedMillis" to SystemClock.elapsedRealtime(),
+                    ),
+                )
+                else -> result.notImplemented()
             }
         }
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(clip)
+        BiometricKeyChannel(this, flutterEngine.dartExecutor.binaryMessenger)
+        DeviceAuthChannel(this, flutterEngine.dartExecutor.binaryMessenger)
     }
 
     private companion object {
         const val CLIPBOARD_CHANNEL = "cofre/secure_clipboard"
-        const val CLIP_LABEL = "Cofre"
+        const val DEVICE_CLOCK_CHANNEL = "cofre/device_clock"
     }
 }

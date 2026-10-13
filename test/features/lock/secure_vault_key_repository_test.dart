@@ -3,11 +3,15 @@ import 'dart:convert';
 import 'package:cofre/core/config/app_config.dart';
 import 'package:cofre/core/security/key_derivation.dart';
 import 'package:cofre/core/security/password_hasher.dart';
+import 'package:cofre/core/services/device_clock.dart';
 import 'package:cofre/features/lock/domain/biometric_key_store.dart';
+import 'package:cofre/features/lock/domain/unlock_attempts.dart';
 import 'package:cofre/features/lock/domain/vault_key_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../helpers/fakes.dart';
+
+const _instant = DeviceInstant(bootId: 7, sinceBoot: Duration(hours: 3));
 
 void main() {
   late InMemoryKeyValueStore store;
@@ -85,10 +89,33 @@ void main() {
     expect(await keys.hasBiometricKey(), isFalse);
   });
 
+  test('bloqueio por tentativas é salvo com o relógio do aparelho', () async {
+    final keys = vaultKeyRepository(store, biometrics);
+    var attempts = const UnlockAttempts();
+    for (var i = 0; i < UnlockAttempts.freeAttempts; i++) {
+      attempts = attempts.registerFailure(_instant);
+    }
+    await keys.saveAttempts(attempts);
+    final loaded = await keys.loadAttempts();
+    expect(loaded.failures, UnlockAttempts.freeAttempts);
+    expect(loaded.remainingLockout(_instant), UnlockAttempts.baseLockout);
+  });
+
+  test('bloqueio no formato antigo (data do sistema) recomeça a espera', () async {
+    final until = DateTime.now().add(const Duration(seconds: 5)).millisecondsSinceEpoch;
+    store.values[AppConfig.unlockAttemptsStorageKey] = jsonEncode({'failures': 6, 'lockedUntil': until});
+    final loaded = (await vaultKeyRepository(store, biometrics).loadAttempts()).reanchored(_instant);
+    expect(loaded.remainingLockout(_instant), const Duration(minutes: 1));
+
+    final expired = DateTime(2020).millisecondsSinceEpoch;
+    store.values[AppConfig.unlockAttemptsStorageKey] = jsonEncode({'failures': 6, 'lockedUntil': expired});
+    expect((await vaultKeyRepository(store, biometrics).loadAttempts()).remainingLockout(_instant), isNull);
+  });
+
   test('limpar remove tudo', () async {
     final keys = vaultKeyRepository(store, biometrics);
     await keys.enableBiometrics(await keys.create(testMasterKey), testPrompt);
-    await keys.saveAttempts((await keys.loadAttempts()).registerFailure(DateTime(2026)));
+    await keys.saveAttempts((await keys.loadAttempts()).registerFailure(_instant));
     await keys.clear();
     expect(store.values, isEmpty);
     expect(biometrics.hasHardwareKey, isFalse);

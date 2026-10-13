@@ -51,6 +51,7 @@ class _MasterKeyFieldState extends State<MasterKeyField> {
               controller: widget.controller,
               hint: widget.hint,
               obscure: !_isVisible,
+              secret: true,
               autofocus: widget.autofocus,
               style: context.textStyles.masterKeyInput,
               onChanged: widget.onChanged,

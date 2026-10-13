@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'key_derivation.dart';
+import 'memory_wipe.dart';
 import 'symmetric_cipher.dart';
 
 export 'symmetric_cipher.dart' show DecryptionFailure;
@@ -34,7 +35,14 @@ class PasswordCipher {
   Future<EncryptedPayload> encrypt(String plainText, String password) async {
     final salt = KeyDerivation.newSalt(_random);
     final key = await keyDerivation.derive(password, salt);
-    final box = await _cipher.seal(utf8.encode(plainText), key);
+    final plain = utf8.encode(plainText);
+    final SealedBox box;
+    try {
+      box = await _cipher.seal(plain, key);
+    } finally {
+      wipeBytes(key);
+      wipeBytes(plain);
+    }
     return EncryptedPayload(
       iterations: keyDerivation.iterations,
       salt: salt,
@@ -46,16 +54,23 @@ class PasswordCipher {
 
   /// Lança [DecryptionFailure] se a senha estiver errada ou os dados tiverem sido alterados.
   Future<String> decrypt(EncryptedPayload payload, String password) async {
-    if (!KeyDerivation.isAcceptable(payload.iterations)) throw const DecryptionFailure();
+    if (!keyDerivation.accepts(payload.iterations)) throw const DecryptionFailure();
     final key = await keyDerivation.derive(password, payload.salt, iterationsOverride: payload.iterations);
-    final bytes = await _cipher.open(
-      SealedBox(nonce: payload.nonce, mac: payload.mac, cipherText: payload.cipherText),
-      key,
-    );
+    final List<int> bytes;
+    try {
+      bytes = await _cipher.open(
+        SealedBox(nonce: payload.nonce, mac: payload.mac, cipherText: payload.cipherText),
+        key,
+      );
+    } finally {
+      wipeBytes(key);
+    }
     try {
       return utf8.decode(bytes);
     } on FormatException {
       throw const DecryptionFailure();
+    } finally {
+      wipeBytes(bytes);
     }
   }
 }

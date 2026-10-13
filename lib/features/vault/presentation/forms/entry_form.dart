@@ -10,6 +10,7 @@ import '../../../../core/theme/theme_context.dart';
 import '../../../../core/widgets/app_icon_button.dart';
 import '../../../../core/widgets/bare_field.dart';
 import '../../../../core/widgets/primary_button.dart';
+import '../../../../core/widgets/strength_meter.dart';
 import '../../../../core/widgets/tap.dart';
 import '../../domain/entities/entry.dart';
 import '../../domain/entities/entry_input.dart';
@@ -17,7 +18,6 @@ import '../../domain/services/password_generator.dart';
 import '../widgets/entry_monogram.dart';
 import '../widgets/form_field_frame.dart';
 import '../widgets/hue_picker.dart';
-import '../widgets/strength_meter.dart';
 
 enum EntryField { title, username, password }
 
@@ -331,7 +331,7 @@ class _PasswordBox extends StatelessWidget {
               controller: controller,
               hint: AppStrings.passwordHint,
               obscure: !isVisible,
-              autocorrect: false,
+              secret: true,
               maxLength: EntryInput.maxPasswordLength,
               style: context.textStyles.mono,
               onChanged: onChanged,

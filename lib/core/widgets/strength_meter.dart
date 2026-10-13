@@ -1,11 +1,11 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../../core/l10n/app_strings.dart';
-import '../../../../core/theme/app_motion.dart';
-import '../../../../core/theme/app_radius.dart';
-import '../../../../core/theme/app_spacing.dart';
-import '../../../../core/theme/theme_context.dart';
-import '../../domain/services/password_strength.dart';
+import '../l10n/app_strings.dart';
+import '../security/password_strength.dart';
+import '../theme/app_motion.dart';
+import '../theme/app_radius.dart';
+import '../theme/app_spacing.dart';
+import '../theme/theme_context.dart';
 import 'strength_presentation.dart';
 
 /// Barra de força da senha com o rótulo ao lado (formulário).

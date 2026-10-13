@@ -24,6 +24,7 @@ class TestApp {
     required this.biometrics,
     required this.clipboard,
     required this.fileTransfer,
+    required this.deviceAuth,
   });
 
   final AppDependencies dependencies;
@@ -32,6 +33,7 @@ class TestApp {
   final FakeBiometricKeyStore biometrics;
   final FakeClipboard clipboard;
   final FakeFileTransferService fileTransfer;
+  final FakeDeviceAuthService deviceAuth;
 }
 
 /// Teste de widget com o app montado. Desmonta e libera os timers no fim (o flutter_test exige que nenhum
@@ -76,12 +78,15 @@ Future<TestApp> pumpCofreApp(
   await prepare?.call(store, files);
 
   final clipboard = FakeClipboard();
+  final deviceAuth = FakeDeviceAuthService();
   final fileTransfer = FakeFileTransferService();
   final dependencies = await AppDependencies.create(
     store: store,
     files: files,
     biometricKeys: biometrics,
     clipboard: clipboard.service(),
+    deviceClock: FakeDeviceClock(DateTime.now),
+    deviceAuth: deviceAuth,
     fileTransfer: fileTransfer,
     keyDerivation: fastKeyDerivation,
     fonts: AppFonts.system(),
@@ -96,6 +101,7 @@ Future<TestApp> pumpCofreApp(
     biometrics: biometrics,
     clipboard: clipboard,
     fileTransfer: fileTransfer,
+    deviceAuth: deviceAuth,
   );
 }
 

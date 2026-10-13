@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/security/password_strength.dart';
 import '../../../../core/theme/app_decorations.dart';
 import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_radius.dart';
@@ -12,11 +13,10 @@ import '../../../../core/widgets/app_icon_button.dart';
 import '../../../../core/widgets/appear.dart';
 import '../../../../core/widgets/hairline_divider.dart';
 import '../../../../core/widgets/icon_tile.dart';
+import '../../../../core/widgets/strength_presentation.dart';
 import '../../../../core/widgets/tap.dart';
 import '../../domain/entities/entry.dart';
-import '../../domain/services/password_strength.dart';
 import 'entry_monogram.dart';
-import 'strength_presentation.dart';
 
 /// Folha inferior com os detalhes de uma senha.
 class EntryDetailSheet extends StatelessWidget {

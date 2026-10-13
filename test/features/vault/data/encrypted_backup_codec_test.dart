@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:cofre/core/config/app_config.dart';
 import 'package:cofre/features/vault/data/backup/encrypted_backup_codec.dart';
 import 'package:cofre/features/vault/data/backup/plain_backup_format.dart';
 import 'package:cofre/features/vault/domain/entities/entry.dart';
@@ -25,6 +26,12 @@ void main() {
       expect(file, isNot(contains(entry.username)));
     }
     expect((jsonDecode(file) as Map)['format'], EncryptedBackupCodec.format);
+  });
+
+  test('recusa backup com mais senhas que o limite', () async {
+    final many = List.generate(AppConfig.maxImportEntries + 1, (i) => entries[i % entries.length]);
+    final file = await codec.encode(many, exportedAt: exportedAt, password: 'senha');
+    expect(codec.decode(file, password: 'senha'), _failsWith(BackupFailureReason.tooLarge));
   });
 
   test('importa com a senha certa', () async {

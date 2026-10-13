@@ -1,11 +1,12 @@
 import 'dart:convert';
 
 import 'package:cofre/core/config/app_config.dart';
+import 'package:cofre/core/security/password_strength.dart';
+import 'package:cofre/core/services/device_auth_service.dart';
 import 'package:cofre/features/lock/domain/biometric_key_store.dart';
 import 'package:cofre/features/settings/domain/app_preferences.dart';
 import 'package:cofre/features/vault/data/backup/encrypted_backup_codec.dart';
 import 'package:cofre/features/vault/domain/entities/entry_input.dart';
-import 'package:cofre/features/vault/domain/services/password_strength.dart';
 import 'package:cofre/features/vault/presentation/controllers/vault_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -34,13 +35,22 @@ void main() {
     expect(find.byIcon(Symbols.fingerprint_rounded), findsNothing);
 
     final fields = find.byType(TextField);
-    await tester.enterText(fields.at(0), 'minha-chave');
-    await tester.enterText(fields.at(1), 'outra-chave');
+    await tester.enterText(fields.at(0), 'senha123');
+    await tester.enterText(fields.at(1), 'senha123');
     await tester.tap(find.text('Criar chave mestre'));
     await tester.pumpAndSettle();
+    expect(find.text('Falta: letra maiúscula e símbolo.'), findsOneWidget);
+    expect(find.bySemanticsLabel('Letra maiúscula (A-Z): falta'), findsOneWidget);
+    expect(find.bySemanticsLabel('Número (0-9): cumprido'), findsOneWidget);
+
+    await tester.enterText(fields.at(0), 'Minha-chave-1');
+    await tester.enterText(fields.at(1), 'Outra-chave-1');
+    await tester.tap(find.text('Criar chave mestre'));
+    await tester.pumpAndSettle();
+    expect(find.text('Forte'), findsOneWidget);
     expect(find.text('As chaves não conferem.'), findsOneWidget);
 
-    await tester.enterText(fields.at(1), 'minha-chave');
+    await tester.enterText(fields.at(1), 'Minha-chave-1');
     await tester.tap(find.text('Criar chave mestre'));
     await tester.pumpAndSettle();
     expect(find.text('Senhas'), findsOneWidget);
@@ -50,7 +60,7 @@ void main() {
     app.dependencies.session.lock();
     await tester.pumpAndSettle();
     expect(find.text('Digite sua chave mestre para abrir'), findsOneWidget);
-    await unlockWithKey(tester, 'minha-chave');
+    await unlockWithKey(tester, 'Minha-chave-1');
     expect(find.text('Senhas'), findsOneWidget);
   }, setup: TestSetup.legacyWithoutKey);
 
@@ -74,8 +84,24 @@ void main() {
     await tester.enterText(find.byType(TextField).last, 'APAGAR');
     await tester.tap(find.text('Apagar'));
     await tester.pumpAndSettle();
-    expect(app.dependencies.vault.entries, isEmpty);
+    expect(app.deviceAuth.prompts, 1);
+    expect(app.files.files, isEmpty);
     expect(find.text('Crie uma chave mestre para proteger o cofre'), findsOneWidget);
+  });
+
+  appTest('esqueci a chave: sem confirmar o bloqueio de tela, nada é apagado', (tester, app) async {
+    app.deviceAuth.result = DeviceAuthResult.failed;
+    await tester.ensureVisible(find.text('Esqueci a chave mestre'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Esqueci a chave mestre'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'APAGAR');
+    await tester.tap(find.text('Apagar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('O cofre não foi apagado'), findsOneWidget);
+    expect(app.files.files, isNotEmpty);
+    expect(find.text('Digite sua chave mestre para abrir'), findsOneWidget);
   });
 
   appTest('digital desbloqueia', (tester, app) async {
@@ -134,6 +160,8 @@ void main() {
 
   appTest('exportar pede senha confirmada e salva o arquivo criptografado', (tester, app) async {
     await openSettings(tester);
+    await tester.ensureVisible(find.text('Exportar cofre'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Exportar cofre'));
     await tester.pumpAndSettle();
     expect(find.text('Proteger backup'), findsOneWidget);
@@ -143,15 +171,22 @@ void main() {
     await tester.enterText(fields.at(1), 'curta');
     await tester.tap(find.text('Exportar'));
     await tester.pump();
-    expect(find.text('Use ao menos 8 caracteres.'), findsOneWidget);
+    expect(find.text('Falta: pelo menos 8 caracteres, letra maiúscula, número e símbolo.'), findsOneWidget);
 
     await tester.enterText(fields.at(0), 'senha-do-backup');
+    await tester.enterText(fields.at(1), 'senha-do-backup');
+    await tester.tap(find.text('Exportar'));
+    await tester.pump();
+    expect(find.text('Falta: letra maiúscula e número.'), findsOneWidget);
+    expect(app.fileTransfer.savedContent, isNull);
+
+    await tester.enterText(fields.at(0), 'Senha-do-backup1');
     await tester.enterText(fields.at(1), 'outra-senha');
     await tester.tap(find.text('Exportar'));
     await tester.pump();
     expect(find.text('As senhas não conferem.'), findsOneWidget);
 
-    await tester.enterText(fields.at(1), 'senha-do-backup');
+    await tester.enterText(fields.at(1), 'Senha-do-backup1');
     await tester.tap(find.text('Exportar'));
     await tester.pumpAndSettle();
     final saved = app.fileTransfer.savedContent!;
@@ -165,6 +200,8 @@ void main() {
         .encode(sampleEntries(DateTime.now()), exportedAt: DateTime.now(), password: 'senha-do-backup');
     await openSettings(tester);
 
+    await tester.ensureVisible(find.text('Importar cofre'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Importar cofre'));
     await tester.pumpAndSettle();
     expect(find.text('Backup protegido'), findsOneWidget);
@@ -184,6 +221,8 @@ void main() {
   appTest('importar backup sem criptografia é recusado', (tester, app) async {
     app.fileTransfer.fileToPick = '[{"title":"Antigo","pw":"x"}]';
     await openSettings(tester);
+    await tester.ensureVisible(find.text('Importar cofre'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Importar cofre'));
     await tester.pumpAndSettle();
     expect(find.text('Backup protegido'), findsNothing);
@@ -285,8 +324,8 @@ void main() {
 
   appTest('primeiro uso: explica a digital antes de acionar o sensor', (tester, app) async {
     final fields = find.byType(TextField);
-    await tester.enterText(fields.at(0), 'minha-chave');
-    await tester.enterText(fields.at(1), 'minha-chave');
+    await tester.enterText(fields.at(0), 'Minha-chave-1');
+    await tester.enterText(fields.at(1), 'Minha-chave-1');
     await tester.tap(find.text('Criar chave mestre'));
     await tester.pumpAndSettle();
 
@@ -303,8 +342,8 @@ void main() {
 
   appTest('migra senhas da versão anterior para o arquivo cifrado ao criar a chave', (tester, app) async {
     final fields = find.byType(TextField);
-    await tester.enterText(fields.at(0), 'minha-chave');
-    await tester.enterText(fields.at(1), 'minha-chave');
+    await tester.enterText(fields.at(0), 'Minha-chave-1');
+    await tester.enterText(fields.at(1), 'Minha-chave-1');
     await tester.tap(find.text('Criar chave mestre'));
     await tester.pumpAndSettle();
 
@@ -386,8 +425,8 @@ void main() {
     await tester.tap(find.text('Exportar'));
     await tester.pumpAndSettle();
     final fields = find.byType(TextField);
-    await tester.enterText(fields.at(fields.evaluate().length - 2), 'senha-do-backup');
-    await tester.enterText(fields.last, 'senha-do-backup');
+    await tester.enterText(fields.at(fields.evaluate().length - 2), 'Senha-do-backup1');
+    await tester.enterText(fields.last, 'Senha-do-backup1');
     await tester.tap(find.text('Exportar').last);
     await tester.pumpAndSettle();
 

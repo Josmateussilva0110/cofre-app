@@ -23,6 +23,20 @@ void main() {
     });
   });
 
+  test('no Android a limpeza fica com o código nativo', () {
+    fakeAsync((async) {
+      final clipboard = FakeClipboard()..platformClears = true;
+      final service = clipboard.service()..copy('segredo', sensitive: true);
+      async.flushMicrotasks();
+      expect(clipboard.platformClearAfter, const Duration(seconds: 30));
+
+      // O Dart não agenda nada: quem apaga é o nativo, inclusive com o app em segundo plano.
+      async.elapse(const Duration(minutes: 1));
+      expect(clipboard.content, 'segredo');
+      service.dispose();
+    });
+  });
+
   test('texto comum não é apagado', () {
     fakeAsync((async) {
       final clipboard = FakeClipboard();

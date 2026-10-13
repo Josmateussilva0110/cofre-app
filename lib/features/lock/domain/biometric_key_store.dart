@@ -31,9 +31,12 @@ class BiometricPromptTexts {
 
 /// Dados cifrados por uma chave do Keystore que só pode ser usada após a digital.
 class BiometricWrappedKey {
-  const BiometricWrappedKey({required this.iv, required this.cipherText});
+  const BiometricWrappedKey({required this.iv, required this.cipherText, this.keyAlias});
 
   final List<int> iv, cipherText;
+
+  /// Nome da chave de hardware que cifrou. Null nas cópias antigas, feitas com o nome fixo.
+  final String? keyAlias;
 }
 
 /// Protege um segredo (a chave do cofre) com uma chave de hardware liberada só pela digital.

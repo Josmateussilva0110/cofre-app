@@ -13,6 +13,7 @@ import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.security.KeyStore
+import java.util.UUID
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -38,13 +39,13 @@ class BiometricKeyChannel(private val activity: FragmentActivity, messenger: Bin
                 "wrap" -> wrap(call, result)
                 "unwrap" -> unwrap(call, result)
                 "delete" -> {
-                    keyStore().deleteEntry(KEY_ALIAS)
+                    deleteKeys()
                     result.success(null)
                 }
                 else -> result.notImplemented()
             }
         } catch (error: KeyPermanentlyInvalidatedException) {
-            keyStore().deleteEntry(KEY_ALIAS)
+            deleteKeys()
             result.error(ERROR_INVALIDATED, null, null)
         } catch (error: Exception) {
             result.error(ERROR_UNAVAILABLE, error.javaClass.simpleName, null)
@@ -59,14 +60,34 @@ class BiometricKeyChannel(private val activity: FragmentActivity, messenger: Bin
             else -> ERROR_UNAVAILABLE
         }
 
-    /** Cria uma chave nova no Keystore e cifra [data] com ela após a digital. */
+    /**
+     * Cria uma chave nova no Keystore e cifra [data] com ela após a digital.
+     *
+     * A chave nova tem nome próprio: a anterior só é apagada depois da digital confirmada, para que cancelar
+     * o diálogo não invalide a cópia que já estava guardada.
+     */
     private fun wrap(call: MethodCall, result: MethodChannel.Result) {
         val data = call.argument<ByteArray>("data") ?: return result.error(ERROR_UNAVAILABLE, "data", null)
+        val alias = "$KEY_ALIAS_PREFIX${UUID.randomUUID()}"
         val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.ENCRYPT_MODE, createKey())
-        authenticate(call, cipher, result) { authorized ->
+        try {
+            cipher.init(Cipher.ENCRYPT_MODE, createKey(alias))
+        } catch (error: Exception) {
+            keyStore().deleteEntry(alias)
+            data.fill(0)
+            throw error
+        }
+        authenticate(
+            call,
+            cipher,
+            result,
+            onFinished = { succeeded ->
+                data.fill(0)
+                if (succeeded) deleteKeys(except = alias) else keyStore().deleteEntry(alias)
+            },
+        ) { authorized ->
             val cipherText = authorized.doFinal(data)
-            mapOf("iv" to authorized.iv, "cipherText" to cipherText)
+            mapOf("iv" to authorized.iv, "cipherText" to cipherText, "alias" to alias)
         }
     }
 
@@ -74,31 +95,48 @@ class BiometricKeyChannel(private val activity: FragmentActivity, messenger: Bin
     private fun unwrap(call: MethodCall, result: MethodChannel.Result) {
         val iv = call.argument<ByteArray>("iv")
         val cipherText = call.argument<ByteArray>("cipherText")
-        val key = keyStore().getKey(KEY_ALIAS, null) as SecretKey?
+        // Cópias antigas não informam o nome: usam o nome fixo da versão anterior.
+        val alias = call.argument<String>("alias") ?: KEY_ALIAS
+        val key = keyStore().getKey(alias, null) as SecretKey?
         if (iv == null || cipherText == null || key == null) return result.error(ERROR_MISSING, null, null)
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_BITS, iv))
         authenticate(call, cipher, result) { authorized -> authorized.doFinal(cipherText) }
     }
 
+    /**
+     * Pede a digital e entrega [onAuthorized] ao Dart. [onFinished] roda no fim, com true se deu certo.
+     *
+     * Se o resultado for um `ByteArray` (a chave do cofre decifrada), ele é zerado logo depois de enviado: o
+     * canal já copiou os bytes ao chamar `success`.
+     */
     private fun authenticate(
         call: MethodCall,
         cipher: Cipher,
         result: MethodChannel.Result,
+        onFinished: (succeeded: Boolean) -> Unit = {},
         onAuthorized: (Cipher) -> Any,
     ) {
         val callback = object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationSucceeded(authResult: BiometricPrompt.AuthenticationResult) {
                 val authorized = authResult.cryptoObject?.cipher
-                    ?: return result.error(ERROR_UNAVAILABLE, "cipher", null)
+                if (authorized == null) {
+                    onFinished(false)
+                    return result.error(ERROR_UNAVAILABLE, "cipher", null)
+                }
                 try {
-                    result.success(onAuthorized(authorized))
+                    val value = onAuthorized(authorized)
+                    onFinished(true)
+                    result.success(value)
+                    (value as? ByteArray)?.fill(0)
                 } catch (error: Exception) {
+                    onFinished(false)
                     result.error(ERROR_UNAVAILABLE, error.javaClass.simpleName, null)
                 }
             }
 
             override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                onFinished(false)
                 result.error(errorCodeFor(errorCode), null, null)
             }
             // onAuthenticationFailed: digital não reconhecida, mas o diálogo continua aberto para nova tentativa.
@@ -113,9 +151,8 @@ class BiometricKeyChannel(private val activity: FragmentActivity, messenger: Bin
             .authenticate(promptInfo, BiometricPrompt.CryptoObject(cipher))
     }
 
-    private fun createKey(): SecretKey {
-        keyStore().deleteEntry(KEY_ALIAS)
-        val spec = KeyGenParameterSpec.Builder(KEY_ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+    private fun createKey(alias: String): SecretKey {
+        val spec = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
             .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
             .setKeySize(KEY_BITS)
@@ -136,6 +173,14 @@ class BiometricKeyChannel(private val activity: FragmentActivity, messenger: Bin
             .generateKey()
     }
 
+    /** Apaga as chaves do cofre no Keystore (a atual, a do nome antigo e sobras de diálogos interrompidos). */
+    private fun deleteKeys(except: String? = null) {
+        val store = keyStore()
+        store.aliases().toList()
+            .filter { (it == KEY_ALIAS || it.startsWith(KEY_ALIAS_PREFIX)) && it != except }
+            .forEach(store::deleteEntry)
+    }
+
     private fun keyStore(): KeyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
 
     private fun errorCodeFor(errorCode: Int): String = when (errorCode) {
@@ -153,7 +198,9 @@ class BiometricKeyChannel(private val activity: FragmentActivity, messenger: Bin
     private companion object {
         const val CHANNEL = "cofre/biometric_key"
         const val ANDROID_KEYSTORE = "AndroidKeyStore"
+        /** Nome fixo usado até a versão anterior. */
         const val KEY_ALIAS = "cofre_vault_biometric_key"
+        const val KEY_ALIAS_PREFIX = "cofre_vault_biometric_key."
         const val TRANSFORMATION = "AES/GCM/NoPadding"
         const val KEY_BITS = 256
         const val GCM_TAG_BITS = 128

@@ -67,7 +67,9 @@ class EncryptedBackupCodec implements BackupCodec {
     } on DecryptionFailure {
       throw const BackupFailure(BackupFailureReason.wrongPassword);
     }
-    return PlainBackupFormat.decode(plainText) ?? (throw const BackupFailure(BackupFailureReason.invalidFile));
+    final inputs = PlainBackupFormat.decode(plainText) ?? (throw const BackupFailure(BackupFailureReason.invalidFile));
+    if (inputs.length > AppConfig.maxImportEntries) throw const BackupFailure(BackupFailureReason.tooLarge);
+    return inputs;
   }
 
   static EncryptedPayload _payloadFrom(Map<dynamic, dynamic> json) {

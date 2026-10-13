@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../../core/l10n/app_strings.dart';
+import '../../../../core/security/password_strength.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_sizes.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/theme_context.dart';
 import '../../../../core/widgets/app_icon_button.dart';
 import '../../domain/entities/entry.dart';
-import '../../domain/services/password_strength.dart';
 import 'entry_monogram.dart';
 import 'strength_bars.dart';
 

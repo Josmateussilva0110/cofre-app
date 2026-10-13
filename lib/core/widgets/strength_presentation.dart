@@ -1,6 +1,6 @@
-import '../../../../core/l10n/app_strings.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../domain/services/password_strength.dart';
+import '../l10n/app_strings.dart';
+import '../security/password_strength.dart';
+import '../theme/app_colors.dart';
 
 /// Texto e cor de cada nível de força de senha.
 extension StrengthLevelPresentation on StrengthLevel {
